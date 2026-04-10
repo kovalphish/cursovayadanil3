@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Вход — ТехноМаркет</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', system-ui, sans-serif; background: #fafafa; color: #1a1a1a; line-height: 1.6; min-height: 100vh; display: flex; flex-direction: column; }
+        
+        .header {
+            background: white;
+            padding: 1rem 2rem;
+            border-bottom: 1px solid #e5e5e5;
+        }
+        .header-inner {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .logo { font-size: 1.5rem; font-weight: 700; color: #0066ff; letter-spacing: -0.5px; }
+        .nav { display: flex; gap: 2rem; }
+        .nav a { 
+            text-decoration: none; 
+            color: #666; 
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: color 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+        .nav a:hover { color: #0066ff; }
+        .nav img { width: 18px; height: 18px; opacity: 0.7; }
+        
+        .main {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+        }
+        
+        .login-card {
+            background: white;
+            border-radius: 12px;
+            border: 1px solid #e5e5e5;
+            padding: 2.5rem;
+            width: 100%;
+            max-width: 400px;
+        }
+        
+        h1 {
+            font-size: 1.5rem;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+            text-align: center;
+            color: #1a1a1a;
+        }
+        
+        .subtitle {
+            text-align: center;
+            color: #6b7280;
+            margin-bottom: 2rem;
+            font-size: 0.9rem;
+        }
+        
+        .form-group {
+            margin-bottom: 1.25rem;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 0.4rem;
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: #374151;
+        }
+        .form-group input {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            border: 1px solid #e5e5e5;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            transition: border-color 0.2s;
+        }
+        .form-group input:focus {
+            outline: none;
+            border-color: #0066ff;
+        }
+        
+        .btn {
+            background: #0066ff;
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.95rem;
+            font-weight: 500;
+            transition: background 0.2s;
+            width: 100%;
+            margin-top: 0.5rem;
+        }
+        .btn:hover {
+            background: #0052cc;
+        }
+        
+        .flash { 
+            padding: 1rem; 
+            margin-bottom: 1.5rem; 
+            background: #fee2e2; 
+            border-radius: 8px; 
+            color: #dc2626;
+            font-size: 0.9rem;
+            border: 1px solid #fecaca;
+        }
+        
+        .footer {
+            background: #1a1a1a;
+            color: white;
+            padding: 2rem;
+            text-align: center;
+            font-size: 0.875rem;
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="header-inner">
+            <div class="logo">ТехноМаркет</div>
+            <nav class="nav">
+                <a href="/"><img src="/static/images/home.png" alt=""> Главная</a>
+                <a href="/products"><img src="/static/images/products.png" alt=""> Товары</a>
+                <a href="/cart"><img src="/static/images/cart.png" alt=""> Корзина</a>
+            </nav>
+        </div>
+    </header>
+    
+    <main class="main">
+        <div class="login-card">
+            <h1>Вход в админ-панель</h1>
+            <p class="subtitle">Введите пароль для доступа</p>
+            
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="flash">{{ message }}</div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+            
+            <form method="POST">
+                <div class="form-group">
+                    <label>Пароль</label>
+                    <input type="password" name="password" required autofocus>
+                </div>
+                <button type="submit" class="btn">Войти</button>
+            </form>
+        </div>
+    </main>
+    
+    <footer class="footer">
+        <p>© 2024 ТехноМаркет. Все права защищены.</p>
+    </footer>
+</body>
+</html>

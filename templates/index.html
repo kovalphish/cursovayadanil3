@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ТехноМаркет</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { height: 100%; }
+        body { font-family: 'Segoe UI', system-ui, sans-serif; background: #fafafa; color: #1a1a1a; line-height: 1.6; display: flex; flex-direction: column; min-height: 100vh; }
+        
+        .header { 
+            background: white; 
+            padding: 1rem 2rem; 
+            position: sticky; 
+            top: 0; 
+            z-index: 100;
+            border-bottom: 1px solid #e5e5e5;
+        }
+        .header-inner {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center;
+        }
+        .logo { font-size: 1.5rem; font-weight: 700; color: #0066ff; letter-spacing: -0.5px; }
+        .nav { display: flex; gap: 2rem; }
+        .nav a { 
+            text-decoration: none; 
+            color: #666; 
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: color 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+        .nav a:hover { color: #0066ff; }
+        .nav img { width: 18px; height: 18px; opacity: 0.7; }
+        
+        .hero { 
+            background: linear-gradient(135deg, #0066ff 0%, #0052cc 100%);
+            color: white; 
+            padding: 4rem 2rem; 
+            text-align: center;
+            margin-bottom: 3rem;
+        }
+        .hero h1 { font-size: 2.5rem; font-weight: 700; margin-bottom: 0.5rem; letter-spacing: -1px; }
+        .hero p { font-size: 1.1rem; opacity: 0.9; }
+        
+        .container { max-width: 1200px; margin: 0 auto; padding: 0 1rem; }
+        
+        .section-title { 
+            font-size: 1.3rem; 
+            font-weight: 600; 
+            margin-bottom: 1.5rem;
+            color: #1a1a1a;
+        }
+        
+        .products-grid { 
+            display: grid; 
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); 
+            gap: 1.5rem;
+            margin-bottom: 3rem;
+        }
+        .product-card { 
+            background: white; 
+            border-radius: 12px; 
+            overflow: hidden;
+            transition: transform 0.2s, box-shadow 0.2s;
+            border: 1px solid #e5e5e5;
+        }
+        .product-card:hover { 
+            transform: translateY(-4px);
+            box-shadow: 0 12px 24px rgba(0,0,0,0.1);
+        }
+        .product-image { 
+            width: 100%; 
+            height: 200px; 
+            object-fit: cover;
+            background: #f5f5f5;
+        }
+        .product-info { padding: 1.25rem; }
+        .product-name { 
+            font-weight: 600; 
+            margin-bottom: 0.5rem;
+            font-size: 1rem;
+            color: #1a1a1a;
+        }
+        .product-price { 
+            font-size: 1.25rem; 
+            font-weight: 700; 
+            color: #0066ff;
+            margin-bottom: 1rem;
+        }
+        .btn { 
+            display: inline-block; 
+            padding: 0.6rem 1.2rem; 
+            background: #0066ff; 
+            color: white; 
+            text-decoration: none; 
+            border-radius: 8px; 
+            font-size: 0.875rem;
+            font-weight: 500;
+            transition: background 0.2s;
+            border: none;
+            cursor: pointer;
+        }
+        .btn:hover { background: #0052cc; }
+        
+        .flash { 
+            padding: 1rem; 
+            margin-bottom: 1.5rem; 
+            background: #e8f5e9; 
+            border-radius: 8px; 
+            color: #2e7d32;
+            font-size: 0.9rem;
+            border: 1px solid #c8e6c9;
+        }
+        
+        .footer {
+            background: #1a1a1a;
+            color: white;
+            padding: 2rem;
+            text-align: center;
+            margin-top: auto;
+            font-size: 0.875rem;
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="header-inner">
+            <div class="logo">ТехноМаркет</div>
+            <nav class="nav">
+                <a href="/"><img src="/static/images/home.png" alt=""> Главная</a>
+                <a href="/products"><img src="/static/images/products.png" alt=""> Товары</a>
+                <a href="/cart"><img src="/static/images/cart.png" alt=""> Корзина</a>
+                <a href="/admin/login"><img src="/static/images/admin.png" alt=""> Админ</a>
+            </nav>
+        </div>
+    </header>
+    
+    <section class="hero">
+        <h1>Бытовая техника</h1>
+        <p>Качество, проверенное временем</p>
+    </section>
+    
+    <main class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="flash">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+        
+        <h2 class="section-title">Популярные товары</h2>
+        <div class="products-grid">
+            {% for product in products %}
+            <article class="product-card">
+                <img src="{{ url_for('static', filename='uploads/' + product.image) }}" alt="{{ product.name }}" class="product-image" onerror="this.src='{{ url_for('static', filename='default.png') }}'">
+                <div class="product-info">
+                    <h3 class="product-name">{{ product.name }}</h3>
+                    <div class="product-price">{{ product.price }} ₽</div>
+                    <a href="/add_to_cart/{{ product.id }}" class="btn">В корзину</a>
+                </div>
+            </article>
+            {% endfor %}
+        </div>
+    </main>
+    
+    <footer class="footer">
+        <p>© 2026 ТехноМаркет. Все права защищены.</p>
+    </footer>
+</body>
+</html>

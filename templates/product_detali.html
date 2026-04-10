@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ product.name }}</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; }
+        .header { background: white; padding: 1rem 2rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); display: flex; justify-content: space-between; align-items: center; }
+        .logo { font-size: 1.3rem; font-weight: 600; color: #2c3e50; }
+        .nav { display: flex; gap: 1.5rem; align-items: center; }
+        .nav a { text-decoration: none; color: #555; display: flex; align-items: center; gap: 0.4rem; }
+        .nav img { width: 20px; height: 20px; }
+        .container { max-width: 1000px; margin: 2rem auto; padding: 0 1rem; }
+        .product-detail { background: white; border-radius: 6px; overflow: hidden; display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; padding: 2rem; }
+        .product-image img { width: 100%; border-radius: 6px; }
+        .product-info h1 { margin-bottom: 1rem; }
+        .price { font-size: 2rem; font-weight: 700; color: #e67e22; margin: 1rem 0; }
+        .stock { margin: 0.5rem 0; color: #666; }
+        .btn { display: inline-block; padding: 0.75rem 1.5rem; background: #3498db; color: white; text-decoration: none; border-radius: 4px; }
+        .flash { padding: 0.75rem; margin-bottom: 1rem; background: #d4edda; border-radius: 4px; color: #155724; }
+        @media (max-width: 768px) {
+            .product-detail { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="logo">ТехноМаркет</div>
+        <div class="nav">
+            <a href="/"><img src="/static/images/home.png" alt="Главная"> Главная</a>
+            <a href="/products"><img src="/static/images/products.png" alt="Товары"> Товары</a>
+            <a href="/cart"><img src="/static/images/cart.png" alt="Корзина"> Корзина</a>
+        </div>
+    </div>
+    <div class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="flash">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <div class="product-detail">
+            <div class="product-image">
+                <img src="{{ url_for('static', filename='uploads/' + product.image) }}" onerror="this.src='{{ url_for('static', filename='default.png') }}'">
+            </div>
+            <div class="product-info">
+                <h1>{{ product.name }}</h1>
+                <div class="category">Категория: {{ product.category or 'Не указана' }}</div>
+                <div class="price">{{ product.price }} ₽</div>
+                <div class="stock">В наличии: {{ product.stock }} шт.</div>
+                <div class="description" style="margin: 1rem 0;">
+                    <h3>Описание</h3>
+                    <p>{{ product.description or 'Описание отсутствует' }}</p>
+                </div>
+                <a href="/add_to_cart/{{ product.id }}" class="btn">Добавить в корзину</a>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
