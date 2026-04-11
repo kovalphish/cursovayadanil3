@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Вход — ТехноМаркет</title>
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        body{font-family:'Segoe UI',system-ui,sans-serif;background:#fafafa;color:#1a1a1a;line-height:1.6;min-height:100vh;display:flex;flex-direction:column}
+        .header{background:#fff;padding:1rem 2rem;border-bottom:1px solid #e5e5e5}
+        .header-inner{max-width:1200px;margin:0 auto;display:flex;justify-content:space-between;align-items:center}
+        .logo{font-size:1.5rem;font-weight:700;color:#0066ff}
+        .nav{display:flex;gap:2rem;align-items:center}
+        .nav a{text-decoration:none;color:#666;font-size:.9rem;font-weight:500;transition:color .2s}
+        .nav a:hover{color:#0066ff}
+        .main{flex:1;display:flex;align-items:center;justify-content:center;padding:2rem}
+        .login-card{background:#fff;border-radius:12px;border:1px solid #e5e5e5;padding:2.5rem;width:100%;max-width:400px}
+        h1{font-size:1.5rem;margin-bottom:.5rem;font-weight:600;text-align:center}
+        .subtitle{text-align:center;color:#6b7280;margin-bottom:2rem;font-size:.9rem}
+        .form-group{margin-bottom:1.25rem}
+        .form-group label{display:block;margin-bottom:.4rem;font-size:.875rem;font-weight:500;color:#374151}
+        .form-group input{width:100%;padding:.75rem 1rem;border:1px solid #e5e5e5;border-radius:8px;font-size:.95rem}
+        .form-group input:focus{outline:none;border-color:#0066ff}
+        .btn{background:#0066ff;color:#fff;border:none;padding:.75rem 1.5rem;border-radius:8px;cursor:pointer;font-size:.95rem;font-weight:500;width:100%;margin-top:.5rem;transition:background .2s}
+        .btn:hover{background:#0052cc}
+        .flash{padding:1rem;margin-bottom:1.5rem;background:#fee2e2;border-radius:8px;color:#dc2626;font-size:.9rem;border:1px solid #fecaca}
+        .footer{background:#1a1a1a;color:#fff;padding:2rem;text-align:center;font-size:.875rem}
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="header-inner">
+            <div class="logo">ТехноМаркет</div>
+            <nav class="nav">
+                <a href="/">Главная</a>
+                <a href="/products">Товары</a>
+            </nav>
+        </div>
+    </header>
+    <main class="main">
+        <div class="login-card">
+            <h1>Вход в админ-панель</h1>
+            <p class="subtitle">Введите пароль для доступа</p>
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="flash">{{ message }}</div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+            <form method="POST">
+                <div class="form-group">
+                    <label>Пароль</label>
+                    <input type="password" name="password" required autofocus>
+                </div>
+                <button type="submit" class="btn">Войти</button>
+            </form>
+        </div>
+    </main>
+    <footer class="footer"><p>© 2026 ТехноМаркет</p></footer>
+</body>
+</html>

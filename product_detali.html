@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Админ-панель — ТехноМаркет</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', system-ui, sans-serif; background: #fafafa; color: #1a1a1a; line-height: 1.6; }
+        
+        .admin-header {
+            background: #1a1a1a;
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .admin-header h1 {
+            color: white;
+            font-size: 1.3rem;
+            font-weight: 600;
+        }
+        .admin-header a {
+            color: rgba(255,255,255,0.7);
+            text-decoration: none;
+            margin-left: 1.5rem;
+            font-size: 0.9rem;
+            transition: color 0.2s;
+        }
+        .admin-header a:hover { color: white; }
+        
+        .container {
+            max-width: 1400px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+        }
+        
+        .section {
+            background: white;
+            border-radius: 12px;
+            margin-bottom: 2rem;
+            border: 1px solid #e5e5e5;
+            overflow: hidden;
+        }
+        .section-header {
+            padding: 1.25rem 1.5rem;
+            border-bottom: 1px solid #e5e5e5;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .section-header h2 {
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+        .section-content {
+            padding: 1.5rem;
+            overflow-x: auto;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid #f0f0f0;
+            font-size: 0.9rem;
+        }
+        th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #374151;
+        }
+        tr:hover {
+            background: #f8f9fa;
+        }
+        
+        .btn { 
+            display: inline-block; 
+            padding: 0.5rem 1rem; 
+            background: #0066ff; 
+            color: white; 
+            text-decoration: none; 
+            border-radius: 6px; 
+            font-size: 0.8rem;
+            font-weight: 500;
+            transition: background 0.2s;
+            border: none;
+            cursor: pointer;
+        }
+        .btn:hover { background: #0052cc; }
+        .btn-danger { background: #ef4444; }
+        .btn-danger:hover { background: #dc2626; }
+        .btn-sm {
+            padding: 0.35rem 0.7rem;
+            font-size: 0.75rem;
+        }
+        
+        .status-badge {
+            display: inline-block;
+            padding: 0.25rem 0.6rem;
+            border-radius: 20px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        .status-new { background: #dbeafe; color: #1d4ed8; }
+        .status-processing { background: #fef3c7; color: #d97706; }
+        .status-completed { background: #d1fae5; color: #059669; }
+        .status-cancelled { background: #fee2e2; color: #dc2626; }
+        
+        .image-preview {
+            width: 50px;
+            height: 50px;
+            object-fit: cover;
+            border-radius: 6px;
+            background: #f5f5f5;
+        }
+        
+        .flash { 
+            padding: 1rem; 
+            margin-bottom: 1.5rem; 
+            background: #e8f5e9; 
+            border-radius: 8px; 
+            color: #2e7d32;
+            font-size: 0.9rem;
+            border: 1px solid #c8e6c9;
+        }
+        
+        select {
+            padding: 0.3rem 0.5rem;
+            border: 1px solid #e5e5e5;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            background: white;
+        }
+    </style>
+</head>
+<body>
+    <header class="admin-header">
+        <h1>Административная панель</h1>
+        <div>
+            <a href="/">На сайт</a>
+            <a href="/admin/logout">Выйти</a>
+        </div>
+    </header>
+
+    <div class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="flash">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <section class="section">
+            <div class="section-header">
+                <h2>Товары</h2>
+                <a href="/admin/product/add" class="btn">+ Добавить товар</a>
+            </div>
+            <div class="section-content">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Изображение</th>
+                            <th>Название</th>
+                            <th>Категория</th>
+                            <th>Цена</th>
+                            <th>Остаток</th>
+                            <th>Действия</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for product in products %}
+                        <tr>
+                            <td>{{ product.id }}</td>
+                            <td><img src="{{ url_for('static', filename='uploads/' + product.image) }}" class="image-preview" onerror="this.src='{{ url_for('static', filename='default.png') }}'"></td>
+                            <td>{{ product.name }}</td>
+                            <td>{{ product.category or '—' }}</td>
+                            <td>{{ product.price }} ₽</td>
+                            <td>{{ product.stock }}</td>
+                            <td>
+                                <a href="/admin/product/edit/{{ product.id }}" class="btn btn-sm">Редактировать</a>
+                                <a href="/admin/product/delete/{{ product.id }}" class="btn btn-danger btn-sm" onclick="return confirm('Удалить товар?')">Удалить</a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="section">
+            <div class="section-header">
+                <h2>Заказы</h2>
+            </div>
+            <div class="section-content">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Клиент</th>
+                            <th>Телефон</th>
+                            <th>Адрес</th>
+                            <th>Сумма</th>
+                            <th>Статус</th>
+                            <th>Дата</th>
+                            <th>Действия</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for order in orders %}
+                        <tr>
+                            <td>{{ order.id }}</td>
+                            <td>{{ order.customer_name }}</td>
+                            <td>{{ order.customer_phone or '—' }}</td>
+                            <td>{{ order.customer_address or '—' }}</td>
+                            <td>{{ order.total }} ₽</td>
+                            <td>
+                                <span class="status-badge status-{{ order.status }}">{{ order.status }}</span>
+                                <form method="POST" action="/admin/order/status/{{ order.id }}" style="display: inline; margin-left: 0.5rem;" id="status-form-{{ order.id }}">
+                                    <select name="status" onchange="document.getElementById('status-form-{{ order.id }}').submit()">
+                                        <option value="new" {% if order.status == 'new' %}selected{% endif %}>Новый</option>
+                                        <option value="processing" {% if order.status == 'processing' %}selected{% endif %}>В обработке</option>
+                                        <option value="completed" {% if order.status == 'completed' %}selected{% endif %}>Выполнен</option>
+                                        <option value="cancelled" {% if order.status == 'cancelled' %}selected{% endif %}>Отменен</option>
+                                    </select>
+                                </form>
+                            </td>
+                            <td>{{ order.date.strftime('%d.%m.%Y %H:%M') }}</td>
+                            <td>
+                                <a href="/admin/order/delete/{{ order.id }}" class="btn btn-danger btn-sm" onclick="return confirm('Удалить заказ?')">Удалить</a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+</body>
+</html>

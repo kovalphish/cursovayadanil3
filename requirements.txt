@@ -1,4 +1,75 @@
-Flask==2.3.3
-Flask-SQLAlchemy==3.0.5
-psycopg2-binary==2.9.9
-Werkzeug==2.3.7
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ product.name }} — ТехноМаркет</title>
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        body{font-family:'Segoe UI',system-ui,sans-serif;background:#fafafa;color:#1a1a1a;line-height:1.6;display:flex;flex-direction:column;min-height:100vh}
+        .header{background:#fff;padding:1rem 2rem;position:sticky;top:0;z-index:100;border-bottom:1px solid #e5e5e5}
+        .header-inner{max-width:1200px;margin:0 auto;display:flex;justify-content:space-between;align-items:center}
+        .logo{font-size:1.5rem;font-weight:700;color:#0066ff}
+        .nav{display:flex;gap:2rem;align-items:center}
+        .nav a{text-decoration:none;color:#666;font-size:.9rem;font-weight:500;transition:color .2s}
+        .nav a:hover{color:#0066ff}
+        .cart-badge{background:#0066ff;color:#fff;border-radius:50%;width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;font-size:.7rem;margin-left:2px}
+        .container{max-width:1000px;margin:2rem auto;padding:0 1rem}
+        .product-detail{background:#fff;border-radius:12px;overflow:hidden;display:grid;grid-template-columns:1fr 1fr;gap:2rem;padding:2rem;border:1px solid #e5e5e5}
+        .product-image img{width:100%;border-radius:12px}
+        .product-info h1{margin-bottom:1rem}
+        .price{font-size:2rem;font-weight:700;color:#0066ff;margin:1rem 0}
+        .stock{margin:.5rem 0;color:#6b7280}
+        .description{margin:1rem 0;color:#555}
+        .btn{display:inline-block;padding:.75rem 1.5rem;background:#0066ff;color:#fff;text-decoration:none;border-radius:8px;font-size:.95rem;font-weight:500;border:none;cursor:pointer;transition:background .2s}
+        .btn:hover{background:#0052cc}
+        .btn-added{background:#10b981}
+        .footer{background:#1a1a1a;color:#fff;padding:2rem;text-align:center;margin-top:auto;font-size:.875rem}
+        @media(max-width:768px){.product-detail{grid-template-columns:1fr}}
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="header-inner">
+            <div class="logo">ТехноМаркет</div>
+            <nav class="nav">
+                <a href="/">Главная</a>
+                <a href="/products">Товары</a>
+                <a href="/cart">Корзина <span class="cart-badge" id="cart-count">0</span></a>
+            </nav>
+        </div>
+    </header>
+    <div class="container">
+        <div class="product-detail">
+            <div class="product-image">
+                <img src="{{ url_for('static', filename='uploads/' + product.image) }}" onerror="this.src='{{ url_for('static', filename='default.png') }}'">
+            </div>
+            <div class="product-info">
+                <h1>{{ product.name }}</h1>
+                <div class="stock">Категория: {{ product.category or 'Не указана' }}</div>
+                <div class="price">{{ product.price }} ₽</div>
+                <div class="stock">В наличии: {{ product.stock }} шт.</div>
+                <div class="description">
+                    <h3>Описание</h3>
+                    <p>{{ product.description or 'Описание отсутствует' }}</p>
+                </div>
+                <button class="btn" onclick="addToCart({{ product.id }}, '{{ product.name }}', {{ product.price }}, '{{ product.image }}')">Добавить в корзину</button>
+            </div>
+        </div>
+    </div>
+    <footer class="footer"><p>© 2026 ТехноМаркет</p></footer>
+    <script>
+    function getCart(){return JSON.parse(localStorage.getItem('cart')||'[]')}
+    function saveCart(c){localStorage.setItem('cart',JSON.stringify(c));updateBadge()}
+    function updateBadge(){document.getElementById('cart-count').textContent=getCart().length}
+    function addToCart(id,name,price,image){
+        var cart=getCart(),item=cart.find(function(i){return i.id===id});
+        if(item){item.qty++}else{cart.push({id:id,name:name,price:price,image:image,qty:1})}
+        saveCart(cart);
+        var btn=event.target;btn.textContent='Добавлено!';btn.classList.add('btn-added');
+        setTimeout(function(){btn.textContent='Добавить в корзину';btn.classList.remove('btn-added')},1000)
+    }
+    updateBadge();
+    </script>
+</body>
+</html>
