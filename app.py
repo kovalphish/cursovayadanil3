@@ -1,90 +1,247 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ТехноМаркет</title>
-    <style>
-        *{margin:0;padding:0;box-sizing:border-box}
-        body{font-family:'Segoe UI',system-ui,sans-serif;background:#fafafa;color:#1a1a1a;line-height:1.6;display:flex;flex-direction:column;min-height:100vh}
-        .header{background:#fff;padding:1rem 2rem;position:sticky;top:0;z-index:100;border-bottom:1px solid #e5e5e5}
-        .header-inner{max-width:1200px;margin:0 auto;display:flex;justify-content:space-between;align-items:center}
-        .logo{font-size:1.5rem;font-weight:700;color:#0066ff;letter-spacing:-0.5px}
-        .nav{display:flex;gap:2rem;align-items:center}
-        .nav a{text-decoration:none;color:#666;font-size:0.9rem;font-weight:500;display:flex;align-items:center;gap:0.4rem;transition:color .2s}
-        .nav a:hover{color:#0066ff}
-        .cart-badge{background:#0066ff;color:#fff;border-radius:50%;width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;font-size:0.7rem;margin-left:2px}
-        .hero{background:linear-gradient(135deg,#0066ff,#0052cc);color:#fff;padding:4rem 2rem;text-align:center;margin-bottom:3rem}
-        .hero h1{font-size:2.5rem;font-weight:700;margin-bottom:.5rem}
-        .hero p{font-size:1.1rem;opacity:.9}
-        .container{max-width:1200px;margin:0 auto;padding:0 1rem}
-        .section-title{font-size:1.3rem;font-weight:600;margin-bottom:1.5rem}
-        .products-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:1.5rem;margin-bottom:3rem}
-        .product-card{background:#fff;border-radius:12px;overflow:hidden;transition:transform .2s,box-shadow .2s;border:1px solid #e5e5e5}
-        .product-card:hover{transform:translateY(-4px);box-shadow:0 12px 24px rgba(0,0,0,.1)}
-        .product-image{width:100%;height:200px;object-fit:cover;background:#f5f5f5}
-        .product-info{padding:1.25rem}
-        .product-name{font-weight:600;margin-bottom:.5rem;font-size:1rem}
-        .product-price{font-size:1.25rem;font-weight:700;color:#0066ff;margin-bottom:1rem}
-        .btn{display:inline-block;padding:.6rem 1.2rem;background:#0066ff;color:#fff;text-decoration:none;border-radius:8px;font-size:.875rem;font-weight:500;border:none;cursor:pointer;transition:background .2s}
-        .btn:hover{background:#0052cc}
-        .btn-added{background:#10b981}
-        .flash{padding:1rem;margin-bottom:1.5rem;background:#e8f5e9;border-radius:8px;color:#2e7d32;font-size:.9rem;border:1px solid #c8e6c9}
-        .footer{background:#1a1a1a;color:#fff;padding:2rem;text-align:center;margin-top:auto;font-size:.875rem}
-    </style>
-</head>
-<body>
-    <header class="header">
-        <div class="header-inner">
-            <div class="logo">ТехноМаркет</div>
-            <nav class="nav">
-                <a href="/">Главная</a>
-                <a href="/products">Товары</a>
-                <a href="/cart">Корзина <span class="cart-badge" id="cart-count">0</span></a>
-                <a href="/admin/login">Админ</a>
-            </nav>
-        </div>
-    </header>
-    <section class="hero">
-        <h1>Бытовая техника</h1>
-        <p>Качество, проверенное временем</p>
-    </section>
-    <main class="container">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                    <div class="flash">{{ message }}</div>
-                {% endfor %}
-            {% endif %}
-        {% endwith %}
-        <h2 class="section-title">Популярные товары</h2>
-        <div class="products-grid">
-            {% for product in products %}
-            <article class="product-card">
-                <img src="{{ url_for('static', filename='uploads/' + product.image) }}" alt="{{ product.name }}" class="product-image" onerror="this.src='{{ url_for('static', filename='default.png') }}'">
-                <div class="product-info">
-                    <h3 class="product-name">{{ product.name }}</h3>
-                    <div class="product-price">{{ product.price }} ₽</div>
-                    <button class="btn" onclick="addToCart({{ product.id }}, '{{ product.name }}', {{ product.price }}, '{{ product.image }}')">В корзину</button>
-                </div>
-            </article>
-            {% endfor %}
-        </div>
-    </main>
-    <footer class="footer"><p> 2026 ТехноМаркет</p></footer>
-    <script>
-    function getCart(){return JSON.parse(localStorage.getItem('cart')||'[]')}
-    function saveCart(c){localStorage.setItem('cart',JSON.stringify(c));updateBadge()}
-    function updateBadge(){document.getElementById('cart-count').textContent=getCart().length}
-    function addToCart(id,name,price,image){
-        let cart=getCart();
-        let item=cart.find(i=>i.id===id);
-        if(item){item.qty++}else{cart.push({id,name,price,image,qty:1})}
-        saveCart(cart);
-        let btn=event.target;btn.textContent='Добавлено!';btn.classList.add('btn-added');
-        setTimeout(()=>{btn.textContent='В корзину';btn.classList.remove('btn-added')},1000)
-    }
-    updateBadge();
-    </script>
-</body>
-</html>
+# ТехноМаркет — интернет-магазин бытовой техники
+from flask import Flask, render_template, request, redirect, url_for, flash, session, send_from_directory, jsonify
+from flask_sqlalchemy import SQLAlchemy
+from datetime import datetime
+import os, uuid
+from functools import wraps
+from werkzeug.utils import secure_filename
+import logging
+
+app = Flask(__name__)
+app.secret_key = os.environ.get('SECRET_KEY', 'dev_key_2026')
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# БД
+db_url = os.environ.get('DATABASE_URL', 'sqlite:////tmp/app.db')
+if db_url.startswith('postgres://'):
+    db_url = db_url.replace('postgres://', 'postgresql://')
+app.config['SQLALCHEMY_DATABASE_URI'] = db_url
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['UPLOAD_FOLDER'] = os.environ.get('UPLOAD_FOLDER', '/tmp/uploads')
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
+os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+
+db = SQLAlchemy(app)
+ADMIN_PASS = os.environ.get('ADMIN_PASSWORD', 'admin123')
+
+# --- Модели ---
+class Product(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(200), nullable=False)
+    category = db.Column(db.String(100))
+    price = db.Column(db.Float, nullable=False)
+    stock = db.Column(db.Integer, default=0)
+    description = db.Column(db.Text)
+    image = db.Column(db.String(200), default='default.png')
+
+class Order(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    customer_name = db.Column(db.String(200), nullable=False)
+    customer_phone = db.Column(db.String(50))
+    customer_address = db.Column(db.Text)
+    total = db.Column(db.Float, default=0)
+    status = db.Column(db.String(50), default='new')
+    date = db.Column(db.DateTime, default=datetime.utcnow)
+    items = db.relationship('OrderItem', backref='order', cascade='all, delete-orphan')
+
+class OrderItem(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    order_id = db.Column(db.Integer, db.ForeignKey('order.id'))
+    product_id = db.Column(db.Integer, db.ForeignKey('product.id'))
+    product_name = db.Column(db.String(200))
+    price = db.Column(db.Float)
+    quantity = db.Column(db.Integer, default=1)
+
+# --- Утилиты ---
+@app.teardown_appcontext
+def close_db(exc):
+    if exc: db.session.rollback()
+    db.session.remove()
+
+def login_required(f):
+    @wraps(f)
+    def wrap(*a, **kw):
+        if not session.get('admin'): return redirect(url_for('admin_login'))
+        return f(*a, **kw)
+    return wrap
+
+def allowed_file(fn):
+    return '.' in fn and fn.rsplit('.',1)[1].lower() in {'png','jpg','jpeg','gif','webp'}
+
+def save_image(img_file):
+    fn = secure_filename(img_file.filename)
+    ext = fn.rsplit('.',1)[1].lower()
+    name = f"{uuid.uuid4().hex}.{ext}"
+    img_file.save(os.path.join(app.config['UPLOAD_FOLDER'], name))
+    return name
+
+# --- API: товары (для корзины на JS) ---
+@app.route('/api/products')
+def api_products():
+    products = Product.query.all()
+    return jsonify([{'id':p.id,'name':p.name,'price':p.price,'image':p.image,'stock':p.stock,'category':p.category or ''} for p in products])
+
+# --- Страницы ---
+@app.route('/')
+def index():
+    try:
+        products = Product.query.limit(8).all()
+    except:
+        products = []
+    return render_template('index.html', products=products)
+
+@app.route('/products')
+def products_page():
+    search = request.args.get('search','')
+    cat = request.args.get('category','')
+    q = Product.query
+    if search: q = q.filter(Product.name.ilike(f'%{search}%'))
+    if cat: q = q.filter_by(category=cat)
+    try:
+        prods = q.all()
+        categories = [c[0] for c in db.session.query(Product.category).distinct() if c[0]]
+    except:
+        prods, categories = [], []
+    return render_template('products.html', products=prods, categories=categories, search=search, current_category=cat)
+
+@app.route('/product/<int:id>')
+def product_detail(id):
+    p = Product.query.get_or_404(id)
+    return render_template('product_detail.html', product=p)
+
+# --- Корзина (JS + localStorage) ---
+@app.route('/cart')
+def cart_page():
+    return render_template('cart.html')
+
+@app.route('/checkout', methods=['POST'])
+def checkout():
+    data = request.get_json(force=True)
+    if not data or not data.get('items'):
+        return jsonify({'error':'Корзина пуста'}), 400
+    name = data.get('name','').strip()
+    phone = data.get('phone','').strip()
+    address = data.get('address','').strip()
+    if not all([name, phone, address]):
+        return jsonify({'error':'Заполните все поля'}), 400
+    try:
+        total = sum(i['price']*i['qty'] for i in data['items'])
+        order = Order(customer_name=name, customer_phone=phone, customer_address=address, total=total)
+        db.session.add(order)
+        db.session.flush()
+        for i in data['items']:
+            db.session.add(OrderItem(order_id=order.id, product_id=i['id'], product_name=i['name'], price=i['price'], quantity=i['qty']))
+            p = Product.query.get(i['id'])
+            if p: p.stock = max(0, p.stock - i['qty'])
+        db.session.commit()
+        return jsonify({'ok':True, 'order_id':order.id})
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f'Checkout: {e}')
+        return jsonify({'error':'Ошибка оформления'}), 500
+
+# --- Админка ---
+@app.route('/admin/login', methods=['GET','POST'])
+def admin_login():
+    if request.method == 'POST':
+        if request.form.get('password') == ADMIN_PASS:
+            session['admin'] = True
+            return redirect(url_for('admin'))
+        flash('Неверный пароль','error')
+    return render_template('admin_login.html')
+
+@app.route('/admin/logout')
+def admin_logout():
+    session.pop('admin', None)
+    return redirect(url_for('index'))
+
+@app.route('/admin')
+@login_required
+def admin():
+    try:
+        prods = Product.query.all()
+        orders = Order.query.order_by(Order.date.desc()).all()
+    except:
+        prods, orders = [], []
+    return render_template('admin.html', products=prods, orders=orders)
+
+@app.route('/admin/product/add', methods=['GET','POST'])
+@login_required
+def product_add():
+    if request.method == 'POST':
+        try:
+            img_name = 'default.png'
+            f = request.files.get('image')
+            if f and allowed_file(f.filename): img_name = save_image(f)
+            p = Product(name=request.form['name'], category=request.form.get('category',''),
+                       price=float(request.form['price']), stock=int(request.form.get('stock',0) or 0),
+                       description=request.form.get('description',''), image=img_name)
+            db.session.add(p); db.session.commit()
+            flash('Товар добавлен','success')
+        except Exception as e:
+            db.session.rollback(); flash(f'Ошибка: {e}','error')
+        return redirect(url_for('admin'))
+    return render_template('product_form.html', title='Добавить товар', product=None)
+
+@app.route('/admin/product/edit/<int:id>', methods=['GET','POST'])
+@login_required
+def product_edit(id):
+    p = Product.query.get_or_404(id)
+    if request.method == 'POST':
+        try:
+            p.name = request.form['name']
+            p.category = request.form.get('category','')
+            p.price = float(request.form['price'])
+            p.stock = int(request.form.get('stock',0) or 0)
+            p.description = request.form.get('description','')
+            f = request.files.get('image')
+            if f and allowed_file(f.filename): p.image = save_image(f)
+            db.session.commit(); flash('Товар обновлен','success')
+        except Exception as e:
+            db.session.rollback(); flash(f'Ошибка: {e}','error')
+        return redirect(url_for('admin'))
+    return render_template('product_form.html', title='Редактировать товар', product=p)
+
+@app.route('/admin/product/delete/<int:id>')
+@login_required
+def product_delete(id):
+    try:
+        db.session.delete(Product.query.get_or_404(id)); db.session.commit(); flash('Удалено','success')
+    except: db.session.rollback(); flash('Ошибка','error')
+    return redirect(url_for('admin'))
+
+@app.route('/admin/order/status/<int:id>', methods=['POST'])
+@login_required
+def order_status(id):
+    try:
+        o = Order.query.get_or_404(id); o.status = request.form.get('status','new')
+        db.session.commit(); flash('Статус обновлен','success')
+    except: db.session.rollback(); flash('Ошибка','error')
+    return redirect(url_for('admin'))
+
+@app.route('/admin/order/delete/<int:id>')
+@login_required
+def order_delete(id):
+    try:
+        db.session.delete(Order.query.get_or_404(id)); db.session.commit(); flash('Удалено','success')
+    except: db.session.rollback(); flash('Ошибка','error')
+    return redirect(url_for('admin'))
+
+# --- Статика ---
+@app.route('/static/uploads/<fn>')
+def uploaded_file(fn):
+    path = os.path.join(app.config['UPLOAD_FOLDER'], fn)
+    if os.path.exists(path): return send_from_directory(app.config['UPLOAD_FOLDER'], fn)
+    return send_from_directory('static', 'default.png')
+
+@app.errorhandler(404)
+def e404(e): return render_template('index.html', products=[]), 404
+
+# --- Инициализация ---
+with app.app_context():
+    try: db.create_all()
+    except Exception as e: logger.error(f'DB init: {e}')
+
+application = app
+if __name__ == '__main__': app.run(debug=False)
