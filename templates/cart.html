@@ -5,192 +5,40 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Корзина — ТехноМаркет</title>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        html, body { height: 100%; }
-        body { font-family: 'Segoe UI', system-ui, sans-serif; background: #fafafa; color: #1a1a1a; line-height: 1.6; display: flex; flex-direction: column; min-height: 100vh; }
-        
-        .header { 
-            background: white; 
-            padding: 1rem 2rem; 
-            position: sticky; 
-            top: 0; 
-            z-index: 100;
-            border-bottom: 1px solid #e5e5e5;
-        }
-        .header-inner {
-            max-width: 1200px;
-            margin: 0 auto;
-            display: flex; 
-            justify-content: space-between; 
-            align-items: center;
-        }
-        .logo { font-size: 1.5rem; font-weight: 700; color: #0066ff; letter-spacing: -0.5px; }
-        .nav { display: flex; gap: 2rem; }
-        .nav a { 
-            text-decoration: none; 
-            color: #666; 
-            font-size: 0.9rem;
-            font-weight: 500;
-            transition: color 0.2s;
-            display: flex;
-            align-items: center;
-            gap: 0.4rem;
-        }
-        .nav a:hover { color: #0066ff; }
-        .nav img { width: 18px; height: 18px; opacity: 0.7; }
-        
-        .container { max-width: 800px; margin: 2rem auto; padding: 0 1rem; }
-        
-        .page-title {
-            font-size: 1.5rem;
-            font-weight: 600;
-            margin-bottom: 1.5rem;
-            color: #1a1a1a;
-        }
-        
-        .cart-section, .checkout-section {
-            background: white;
-            border-radius: 12px;
-            padding: 1.5rem;
-            margin-bottom: 1.5rem;
-            border: 1px solid #e5e5e5;
-        }
-        
-        .cart-item {
-            display: flex;
-            gap: 1rem;
-            padding: 1rem 0;
-            border-bottom: 1px solid #f0f0f0;
-            align-items: center;
-        }
-        .cart-item:last-child {
-            border-bottom: none;
-        }
-        
-        .cart-item-image {
-            width: 80px;
-            height: 80px;
-            object-fit: cover;
-            border-radius: 8px;
-            background: #f5f5f5;
-        }
-        
-        .cart-item-info {
-            flex: 1;
-        }
-        .cart-item-name {
-            font-weight: 600;
-            margin-bottom: 0.25rem;
-        }
-        .cart-item-price {
-            color: #0066ff;
-            font-weight: 600;
-        }
-        .cart-item-subtotal {
-            font-weight: 600;
-            color: #1a1a1a;
-            font-size: 0.95rem;
-        }
-        
-        .cart-item-qty {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-        .cart-item-qty input {
-            width: 60px;
-            padding: 0.4rem;
-            border: 1px solid #e5e5e5;
-            border-radius: 6px;
-            text-align: center;
-            font-size: 0.9rem;
-        }
-        
-        .btn { 
-            display: inline-block; 
-            padding: 0.6rem 1.2rem; 
-            background: #0066ff; 
-            color: white; 
-            text-decoration: none; 
-            border-radius: 8px; 
-            font-size: 0.875rem;
-            font-weight: 500;
-            transition: background 0.2s;
-            border: none;
-            cursor: pointer;
-        }
-        .btn:hover { background: #0052cc; }
-        .btn-danger {
-            background: #ef4444;
-            padding: 0.4rem 0.8rem;
-            font-size: 0.8rem;
-        }
-        .btn-danger:hover {
-            background: #dc2626;
-        }
-        
-        .cart-total {
-            text-align: right;
-            padding-top: 1rem;
-            font-size: 1.25rem;
-            font-weight: 700;
-            color: #1a1a1a;
-        }
-        .cart-total span {
-            color: #0066ff;
-        }
-        
-        .form-group {
-            margin-bottom: 1rem;
-        }
-        .form-group label {
-            display: block;
-            margin-bottom: 0.4rem;
-            font-weight: 500;
-            font-size: 0.9rem;
-            color: #374151;
-        }
-        .form-group input {
-            width: 100%;
-            padding: 0.75rem 1rem;
-            border: 1px solid #e5e5e5;
-            border-radius: 8px;
-            font-size: 0.95rem;
-            transition: border-color 0.2s;
-        }
-        .form-group input:focus {
-            outline: none;
-            border-color: #0066ff;
-        }
-        
-        .flash { 
-            padding: 1rem; 
-            margin-bottom: 1.5rem; 
-            background: #e8f5e9; 
-            border-radius: 8px; 
-            color: #2e7d32;
-            font-size: 0.9rem;
-            border: 1px solid #c8e6c9;
-        }
-        
-        .empty-cart {
-            text-align: center;
-            padding: 3rem;
-            color: #6b7280;
-        }
-        .empty-cart p {
-            margin-bottom: 1rem;
-            font-size: 1.1rem;
-        }
-        
-        .footer {
-            background: #1a1a1a;
-            color: white;
-            padding: 2rem;
-            text-align: center;
-            margin-top: auto;
-            font-size: 0.875rem;
-        }
+        *{margin:0;padding:0;box-sizing:border-box}
+        body{font-family:'Segoe UI',system-ui,sans-serif;background:#fafafa;color:#1a1a1a;line-height:1.6;display:flex;flex-direction:column;min-height:100vh}
+        .header{background:#fff;padding:1rem 2rem;position:sticky;top:0;z-index:100;border-bottom:1px solid #e5e5e5}
+        .header-inner{max-width:1200px;margin:0 auto;display:flex;justify-content:space-between;align-items:center}
+        .logo{font-size:1.5rem;font-weight:700;color:#0066ff}
+        .nav{display:flex;gap:2rem;align-items:center}
+        .nav a{text-decoration:none;color:#666;font-size:.9rem;font-weight:500;display:flex;align-items:center;gap:.4rem;transition:color .2s}
+        .nav a:hover{color:#0066ff}
+        .cart-badge{background:#0066ff;color:#fff;border-radius:50%;width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;font-size:.7rem;margin-left:2px}
+        .container{max-width:800px;margin:2rem auto;padding:0 1rem}
+        .page-title{font-size:1.5rem;font-weight:600;margin-bottom:1.5rem}
+        .cart-section,.checkout-section{background:#fff;border-radius:12px;padding:1.5rem;margin-bottom:1.5rem;border:1px solid #e5e5e5}
+        .cart-item{display:flex;gap:1rem;padding:1rem 0;border-bottom:1px solid #f0f0f0;align-items:center}
+        .cart-item:last-child{border-bottom:none}
+        .cart-item-image{width:80px;height:80px;object-fit:cover;border-radius:8px;background:#f5f5f5}
+        .cart-item-info{flex:1}
+        .cart-item-name{font-weight:600;margin-bottom:.25rem}
+        .cart-item-price{color:#0066ff;font-weight:600}
+        .cart-item-subtotal{font-weight:600;font-size:.95rem;min-width:100px;text-align:right}
+        .cart-item-qty{display:flex;align-items:center;gap:.5rem}
+        .cart-item-qty input{width:60px;padding:.4rem;border:1px solid #e5e5e5;border-radius:6px;text-align:center;font-size:.9rem}
+        .btn{display:inline-block;padding:.5rem 1rem;background:#0066ff;color:#fff;text-decoration:none;border-radius:8px;font-size:.85rem;font-weight:500;border:none;cursor:pointer;transition:background .2s}
+        .btn:hover{background:#0052cc}
+        .btn-danger{background:#ef4444;padding:.4rem .8rem;font-size:.8rem}
+        .btn-danger:hover{background:#dc2626}
+        .cart-total{text-align:right;padding-top:1rem;font-size:1.25rem;font-weight:700}
+        .cart-total span{color:#0066ff}
+        .form-group{margin-bottom:1rem}
+        .form-group label{display:block;margin-bottom:.4rem;font-weight:500;font-size:.9rem;color:#374151}
+        .form-group input{width:100%;padding:.75rem 1rem;border:1px solid #e5e5e5;border-radius:8px;font-size:.95rem}
+        .form-group input:focus{outline:none;border-color:#0066ff}
+        .empty-cart{text-align:center;padding:3rem;color:#6b7280}
+        .empty-cart p{margin-bottom:1rem;font-size:1.1rem}
+        .footer{background:#1a1a1a;color:#fff;padding:2rem;text-align:center;margin-top:auto;font-size:.875rem}
     </style>
 </head>
 <body>
@@ -198,111 +46,53 @@
         <div class="header-inner">
             <div class="logo">ТехноМаркет</div>
             <nav class="nav">
-                <a href="/"><img src="/static/images/home.png" alt=""> Главная</a>
-                <a href="/products"><img src="/static/images/products.png" alt=""> Товары</a>
-                <a href="/cart"><img src="/static/images/cart.png" alt=""> Корзина</a>
-                <a href="/admin/login"><img src="/static/images/admin.png" alt=""> Админ</a>
+                <a href="/">Главная</a>
+                <a href="/products">Товары</a>
+                <a href="/cart">Корзина <span class="cart-badge" id="cart-count">0</span></a>
+                <a href="/admin/login">Админ</a>
             </nav>
         </div>
     </header>
-    
     <main class="container">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                    <div class="flash">{{ message }}</div>
-                {% endfor %}
-            {% endif %}
-        {% endwith %}
-
         <h1 class="page-title">Корзина</h1>
-
-        {% if items %}
-        <div class="cart-section">
-            {% for item in items %}
-            <div class="cart-item">
-                <img src="{{ url_for('static', filename='uploads/' + item.product.image) }}" alt="{{ item.product.name }}" class="cart-item-image" onerror="this.src='{{ url_for('static', filename='default.png') }}'">
-                <div class="cart-item-info">
-                    <div class="cart-item-name">{{ item.product.name }}</div>
-                    <div class="cart-item-price">{{ item.product.price }} ₽</div>
-                </div>
-                <div class="cart-item-qty">
-                    <input type="number" class="qty-input" data-pid="{{ item.product.id }}" value="{{ item.qty }}" min="1" max="{{ item.product.stock }}">
-                    <a href="/remove_from_cart/{{ item.product.id }}" class="btn btn-danger">Удалить</a>
-                </div>
-                <div class="cart-item-subtotal" data-pid="{{ item.product.id }}">{{ item.subtotal }} ₽</div>
-            </div>
-            {% endfor %}
-            
-            <div class="cart-total">
-                Итого: <span id="total-price">{{ total }} ₽</span>
-            </div>
-        </div>
-
-        <div class="checkout-section">
-            <h2 style="font-size: 1.2rem; margin-bottom: 1rem; font-weight: 600;">Оформление заказа</h2>
-            <form method="POST" action="/checkout">
-                <div class="form-group">
-                    <label>Ваше имя *</label>
-                    <input type="text" name="name" required>
-                </div>
-                <div class="form-group">
-                    <label>Телефон *</label>
-                    <input type="tel" name="phone" required>
-                </div>
-                <div class="form-group">
-                    <label>Адрес доставки *</label>
-                    <input type="text" name="address" required>
-                </div>
-                <button type="submit" class="btn" style="width: 100%; margin-top: 0.5rem;">Подтвердить заказ</button>
-            </form>
-        </div>
-        {% else %}
-        <div class="cart-section">
-            <div class="empty-cart">
-                <p>Корзина пуста</p>
-                <a href="/products" class="btn">Перейти к товарам</a>
-            </div>
-        </div>
-        {% endif %}
+        <div id="cart-content"></div>
     </main>
-    
-    <footer class="footer">
-        <p>© 2024 ТехноМаркет. Все права защищены.</p>
-    </footer>
-
+    <footer class="footer"><p>© 2026 ТехноМаркет</p></footer>
     <script>
-        // Автообновление корзины при изменении количества
-        document.querySelectorAll('.qty-input').forEach(function(input) {
-            input.addEventListener('change', function() {
-                var pid = this.dataset.pid;
-                var qty = parseInt(this.value);
-                var maxStock = parseInt(this.max);
-                
-                if (qty < 1) {
-                    qty = 1;
-                    this.value = 1;
-                }
-                if (qty > maxStock) {
-                    qty = maxStock;
-                    this.value = maxStock;
-                }
-                
-                // Обновляем корзину через fetch
-                var formData = new FormData();
-                formData.append('qty_' + pid, qty);
-                
-                fetch('/update_cart', {
-                    method: 'POST',
-                    body: formData
-                }).then(function(response) {
-                    return response.text();
-                }).then(function(html) {
-                    // Перезагружаем страницу для обновления цен
-                    window.location.reload();
-                });
-            });
-        });
+    function getCart(){return JSON.parse(localStorage.getItem('cart')||'[]')}
+    function saveCart(c){localStorage.setItem('cart',JSON.stringify(c));updateBadge()}
+    function updateBadge(){document.getElementById('cart-count').textContent=getCart().length}
+    function renderCart(){
+        var cart=getCart(),el=document.getElementById('cart-content');
+        if(!cart.length){
+            el.innerHTML='<div class="cart-section"><div class="empty-cart"><p>Корзина пуста</p><a href="/products" class="btn">Перейти к товарам</a></div></div>';
+            return;
+        }
+        var total=0,html='<div class="cart-section">';
+        for(var i=0;i<cart.length;i++){
+            var item=cart[i],sub=item.price*item.qty;total+=sub;
+            html+='<div class="cart-item"><img src="/static/uploads/'+item.image+'" alt="'+item.name+'" class="cart-item-image" onerror="this.src=\'/static/default.png\'"><div class="cart-item-info"><div class="cart-item-name">'+item.name+'</div><div class="cart-item-price">'+item.price+' ₽</div></div><div class="cart-item-qty"><input type="number" value="'+item.qty+'" min="1" onchange="changeQty('+i+',this.value)"><button class="btn btn-danger" onclick="removeItem('+i+')">Удалить</button></div><div class="cart-item-subtotal">'+sub+' ₽</div></div>';
+        }
+        html+='<div class="cart-total">Итого: <span>'+total+' ₽</span></div></div>';
+        html+='<div class="checkout-section"><h2 style="font-size:1.2rem;margin-bottom:1rem;font-weight:600">Оформление заказа</h2><div class="form-group"><label>Ваше имя *</label><input type="text" id="f-name"></div><div class="form-group"><label>Телефон *</label><input type="tel" id="f-phone"></div><div class="form-group"><label>Адрес доставки *</label><input type="text" id="f-address"></div><button class="btn" style="width:100%;margin-top:.5rem" onclick="doCheckout()">Подтвердить заказ</button></div>';
+        el.innerHTML=html;
+    }
+    function changeQty(i,val){var cart=getCart();cart[i].qty=Math.max(1,parseInt(val)||1);saveCart(cart);renderCart()}
+    function removeItem(i){var cart=getCart();cart.splice(i,1);saveCart(cart);renderCart()}
+    function doCheckout(){
+        var name=document.getElementById('f-name').value.trim(),
+            phone=document.getElementById('f-phone').value.trim(),
+            address=document.getElementById('f-address').value.trim();
+        if(!name||!phone||!address){alert('Заполните все поля');return}
+        var cart=getCart();
+        fetch('/checkout',{method:'POST',headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({name:name,phone:phone,address:address,items:cart.map(function(i){return{id:i.id,name:i.name,price:i.price,qty:i.qty}})})
+        }).then(function(r){return r.json()}).then(function(d){
+            if(d.ok){localStorage.removeItem('cart');alert('Заказ #'+d.order_id+' оформлен!');window.location.href='/'}
+            else alert(d.error||'Ошибка')
+        }).catch(function(){alert('Ошибка соединения')});
+    }
+    updateBadge();renderCart();
     </script>
 </body>
 </html>
