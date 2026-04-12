@@ -178,7 +178,7 @@
                         {% for product in products %}
                         <tr>
                             <td>{{ product.id }}</td>
-                            <td><img src="{{ url_for('static', filename='uploads/' + product.image) }}" class="image-preview" onerror="this.src='{{ url_for('static', filename='default.png') }}'"></td>
+                            <td><img src="{{ url_for('uploaded_file', fn=product.image) }}" class="image-preview" onerror="this.src='{{ url_for('uploaded_file', fn='default.png') }}'"></td>
                             <td>{{ product.name }}</td>
                             <td>{{ product.category or '—' }}</td>
                             <td>{{ product.price }} ₽</td>

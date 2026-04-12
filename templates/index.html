@@ -3,461 +3,87 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ТехноМаркет - интернет-магазин бытовой техники</title>
+    <title>ТехноМаркет</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        body {
-            font-family: 'Segoe UI', system-ui, sans-serif;
-            background: #fafafa;
-            color: #1a1a1a;
-            line-height: 1.6;
-            display: flex;
-            flex-direction: column;
-            min-height: 100vh;
-        }
-        
-        .header {
-            background: #fff;
-            padding: 1rem 2rem;
-            position: sticky;
-            top: 0;
-            z-index: 100;
-            border-bottom: 1px solid #e5e5e5;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
-        }
-        
-        .header-inner {
-            max-width: 1400px;
-            margin: 0 auto;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        
-        .logo {
-            font-size: 1.5rem;
-            font-weight: 700;
-            background: linear-gradient(135deg, #0066ff, #0052cc);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            letter-spacing: -0.5px;
-        }
-        
-        .nav {
-            display: flex;
-            gap: 2rem;
-            align-items: center;
-        }
-        
-        .nav a {
-            text-decoration: none;
-            color: #666;
-            font-size: 0.9rem;
-            font-weight: 500;
-            display: flex;
-            align-items: center;
-            gap: 0.4rem;
-            transition: color .2s;
-        }
-        
-        .nav a:hover {
-            color: #0066ff;
-        }
-        
-        .cart-badge {
-            background: #0066ff;
-            color: #fff;
-            border-radius: 50%;
-            min-width: 20px;
-            height: 20px;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 0.7rem;
-            padding: 0 5px;
-            margin-left: 2px;
-        }
-        
-        .hero {
-            background: linear-gradient(135deg, #0066ff, #0052cc);
-            color: #fff;
-            padding: 4rem 2rem;
-            text-align: center;
-            margin-bottom: 3rem;
-        }
-        
-        .hero h1 {
-            font-size: 2.5rem;
-            font-weight: 700;
-            margin-bottom: .5rem;
-        }
-        
-        .hero p {
-            font-size: 1.1rem;
-            opacity: .9;
-        }
-        
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 0 1rem;
-            flex: 1;
-        }
-        
-        .section-title {
-            font-size: 1.8rem;
-            font-weight: 600;
-            margin-bottom: 2rem;
-            color: #1a1a1a;
-        }
-        
-        /* Товары в строку - улучшенная сетка */
-        .products-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-            gap: 2rem;
-            margin-bottom: 3rem;
-        }
-        
-        .product-card {
-            background: #fff;
-            border-radius: 12px;
-            overflow: hidden;
-            transition: transform 0.3s ease, box-shadow 0.3s ease;
-            border: 1px solid #e5e5e5;
-            display: flex;
-            flex-direction: column;
-        }
-        
-        .product-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 12px 24px rgba(0,0,0,0.1);
-        }
-        
-        .product-image {
-            width: 100%;
-            height: 220px;
-            object-fit: cover;
-            background: #f5f5f5;
-        }
-        
-        .product-info {
-            padding: 1.25rem;
-            display: flex;
-            flex-direction: column;
-            flex: 1;
-        }
-        
-        .product-name {
-            font-weight: 600;
-            margin-bottom: 0.5rem;
-            font-size: 1rem;
-            line-height: 1.4;
-            min-height: 48px;
-            color: #1a1a1a;
-        }
-        
-        .product-price {
-            font-size: 1.5rem;
-            font-weight: 700;
-            color: #0066ff;
-            margin-bottom: 0.5rem;
-        }
-        
-        .product-stock {
-            font-size: 0.85rem;
-            color: #666;
-            margin-bottom: 1rem;
-        }
-        
-        .product-stock.in-stock {
-            color: #10b981;
-        }
-        
-        .product-stock.out-stock {
-            color: #ef4444;
-        }
-        
-        .btn {
-            display: inline-block;
-            padding: 0.7rem 1.2rem;
-            background: #0066ff;
-            color: #fff;
-            text-decoration: none;
-            border-radius: 8px;
-            font-size: 0.9rem;
-            font-weight: 500;
-            border: none;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            text-align: center;
-            margin-top: auto;
-        }
-        
-        .btn:hover {
-            background: #0052cc;
-            transform: translateY(-2px);
-        }
-        
-        .btn:disabled {
-            background: #ccc;
-            cursor: not-allowed;
-            transform: none;
-        }
-        
-        .btn-added {
-            background: #10b981;
-        }
-        
-        .btn-added:hover {
-            background: #059669;
-        }
-        
-        .flash {
-            padding: 1rem;
-            margin-bottom: 1.5rem;
-            border-radius: 8px;
-            font-size: .9rem;
-        }
-        
-        .flash.success {
-            background: #e8f5e9;
-            color: #2e7d32;
-            border: 1px solid #c8e6c9;
-        }
-        
-        .flash.error {
-            background: #ffebee;
-            color: #c62828;
-            border: 1px solid #ffcdd2;
-        }
-        
-        .footer {
-            background: #1a1a1a;
-            color: #fff;
-            padding: 2rem;
-            text-align: center;
-            margin-top: 3rem;
-            font-size: .875rem;
-        }
-        
-        /* Уведомление */
-        .toast {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            background: #10b981;
-            color: white;
-            padding: 12px 20px;
-            border-radius: 8px;
-            z-index: 1000;
-            animation: slideIn 0.3s ease;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-        }
-        
-        .toast.error {
-            background: #ef4444;
-        }
-        
-        @keyframes slideIn {
-            from {
-                transform: translateX(100%);
-                opacity: 0;
-            }
-            to {
-                transform: translateX(0);
-                opacity: 1;
-            }
-        }
-        
-        /* Адаптивность */
-        @media (max-width: 768px) {
-            .header-inner {
-                flex-direction: column;
-                gap: 1rem;
-            }
-            
-            .nav {
-                gap: 1.5rem;
-            }
-            
-            .hero h1 {
-                font-size: 1.8rem;
-            }
-            
-            .products-grid {
-                grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-                gap: 1rem;
-            }
-            
-            .section-title {
-                font-size: 1.5rem;
-            }
-        }
-        
-        @media (max-width: 480px) {
-            .products-grid {
-                grid-template-columns: 1fr;
-            }
-        }
-        
-        /* Загрузка */
-        .loading {
-            text-align: center;
-            padding: 2rem;
-            color: #666;
-        }
+        *{margin:0;padding:0;box-sizing:border-box}
+        body{font-family:'Segoe UI',system-ui,sans-serif;background:#fafafa;color:#1a1a1a;line-height:1.6;display:flex;flex-direction:column;min-height:100vh}
+        .header{background:#fff;padding:1rem 2rem;position:sticky;top:0;z-index:100;border-bottom:1px solid #e5e5e5}
+        .header-inner{max-width:1200px;margin:0 auto;display:flex;justify-content:space-between;align-items:center}
+        .logo{font-size:1.5rem;font-weight:700;color:#0066ff;letter-spacing:-0.5px}
+        .nav{display:flex;gap:2rem;align-items:center}
+        .nav a{text-decoration:none;color:#666;font-size:0.9rem;font-weight:500;display:flex;align-items:center;gap:0.4rem;transition:color .2s}
+        .nav a:hover{color:#0066ff}
+        .cart-badge{background:#0066ff;color:#fff;border-radius:50%;width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;font-size:0.7rem;margin-left:2px}
+        .hero{background:linear-gradient(135deg,#0066ff,#0052cc);color:#fff;padding:4rem 2rem;text-align:center;margin-bottom:3rem}
+        .hero h1{font-size:2.5rem;font-weight:700;margin-bottom:.5rem}
+        .hero p{font-size:1.1rem;opacity:.9}
+        .container{max-width:1200px;margin:0 auto;padding:0 1rem}
+        .section-title{font-size:1.3rem;font-weight:600;margin-bottom:1.5rem}
+        .products-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:1.5rem;margin-bottom:3rem}
+        .product-card{background:#fff;border-radius:12px;overflow:hidden;transition:transform .2s,box-shadow .2s;border:1px solid #e5e5e5}
+        .product-card:hover{transform:translateY(-4px);box-shadow:0 12px 24px rgba(0,0,0,.1)}
+        .product-image{width:100%;height:200px;object-fit:cover;background:#f5f5f5}
+        .product-info{padding:1.25rem}
+        .product-name{font-weight:600;margin-bottom:.5rem;font-size:1rem}
+        .product-price{font-size:1.25rem;font-weight:700;color:#0066ff;margin-bottom:1rem}
+        .btn{display:inline-block;padding:.6rem 1.2rem;background:#0066ff;color:#fff;text-decoration:none;border-radius:8px;font-size:.875rem;font-weight:500;border:none;cursor:pointer;transition:background .2s}
+        .btn:hover{background:#0052cc}
+        .btn-added{background:#10b981}
+        .flash{padding:1rem;margin-bottom:1.5rem;background:#e8f5e9;border-radius:8px;color:#2e7d32;font-size:.9rem;border:1px solid #c8e6c9}
+        .footer{background:#1a1a1a;color:#fff;padding:2rem;text-align:center;margin-top:auto;font-size:.875rem}
     </style>
 </head>
 <body>
     <header class="header">
         <div class="header-inner">
-            <div class="logo">🏪 ТехноМаркет</div>
+            <div class="logo">ТехноМаркет</div>
             <nav class="nav">
-                <a href="{{ url_for('index') }}">🏠 Главная</a>
-                <a href="{{ url_for('products_page') }}">📦 Каталог</a>
-                <a href="{{ url_for('cart_page') }}">🛒 Корзина <span class="cart-badge" id="cart-count">0</span></a>
-                <a href="{{ url_for('admin_login') }}">🔧 Админ</a>
+                <a href="/">Главная</a>
+                <a href="/products">Товары</a>
+                <a href="/cart">Корзина <span class="cart-badge" id="cart-count">0</span></a>
+                <a href="/admin/login">Админ</a>
             </nav>
         </div>
     </header>
-    
     <section class="hero">
         <h1>Бытовая техника</h1>
         <p>Качество, проверенное временем</p>
     </section>
-    
     <main class="container">
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
                 {% for category, message in messages %}
-                    <div class="flash {{ category if category else 'success' }}">{{ message }}</div>
+                    <div class="flash">{{ message }}</div>
                 {% endfor %}
             {% endif %}
         {% endwith %}
-        
-        <h2 class="section-title">🔥 Популярные товары</h2>
-        
-        <div class="products-grid" id="products-grid">
+        <h2 class="section-title">Популярные товары</h2>
+        <div class="products-grid">
             {% for product in products %}
-            <article class="product-card" data-product-id="{{ product.id }}">
-                <!-- Исправленный путь к изображениям -->
-                <img src="{{ url_for('uploaded_file', filename=product.image) }}" 
-                     alt="{{ product.name }}" 
-                     class="product-image" 
-                     onerror="this.src='{{ url_for('static', filename='default.png') }}'; this.onerror=null;">
-                
+            <article class="product-card">
+                <img src="{{ url_for('uploaded_file', fn=product.image) }}" alt="{{ product.name }}" class="product-image" onerror="this.src='{{ url_for('uploaded_file', fn='default.png') }}'">
                 <div class="product-info">
                     <h3 class="product-name">{{ product.name }}</h3>
-                    <div class="product-price">{{ '{:,.0f}'.format(product.price).replace(',', ' ') }} ₽</div>
-                    <div class="product-stock {% if product.stock > 0 %}in-stock{% else %}out-stock{% endif %}">
-                        {% if product.stock > 0 %}
-                            ✅ В наличии: {{ product.stock }} шт.
-                        {% else %}
-                            ❌ Нет в наличии
-                        {% endif %}
-                    </div>
-                    <button class="btn" 
-                            onclick="addToCart({{ product.id }}, '{{ product.name|replace("'", "\\'") }}', {{ product.price }}, {{ product.stock }})"
-                            {% if product.stock <= 0 %}disabled{% endif %}>
-                        {% if product.stock > 0 %}🛒 В корзину{% else %}📦 Нет в наличии{% endif %}
-                    </button>
+                    <div class="product-price">{{ product.price }} ₽</div>
+                    <button class="btn" onclick="addToCart({{ product.id }}, '{{ product.name }}', {{ product.price }}, '{{ product.image }}')">В корзину</button>
                 </div>
             </article>
             {% endfor %}
         </div>
     </main>
-    
-    <footer class="footer">
-        <p>© 2026 ТехноМаркет | Все права защищены</p>
-    </footer>
-    
+    <footer class="footer"><p> 2026 ТехноМаркет</p></footer>
     <script>
-    // Функции для работы с корзиной
-    function getCart() {
-        return JSON.parse(localStorage.getItem('cart') || '[]');
-    }
-    
-    function saveCart(cart) {
-        localStorage.setItem('cart', JSON.stringify(cart));
-        updateBadge();
-    }
-    
-    function updateBadge() {
-        const cart = getCart();
-        const totalItems = cart.reduce((sum, item) => sum + (item.quantity || item.qty || 1), 0);
-        const badge = document.getElementById('cart-count');
-        if (badge) badge.textContent = totalItems;
-    }
-    
-    function showToast(message, isError = false) {
-        const toast = document.createElement('div');
-        toast.className = 'toast' + (isError ? ' error' : '');
-        toast.textContent = message;
-        document.body.appendChild(toast);
-        setTimeout(() => toast.remove(), 3000);
-    }
-    
-    function addToCart(id, name, price, stock) {
-        // Проверка наличия товара
-        if (stock <= 0) {
-            showToast('❌ Товар отсутствует на складе', true);
-            return;
-        }
-        
-        let cart = getCart();
-        let existingItem = cart.find(item => item.id === id);
-        
-        if (existingItem) {
-            // Проверка лимита
-            if (existingItem.quantity >= stock) {
-                showToast(`❌ Недостаточно товара на складе (доступно: ${stock} шт.)`, true);
-                return;
-            }
-            existingItem.quantity++;
-        } else {
-            cart.push({
-                id: id,
-                name: name,
-                price: price,
-                quantity: 1,
-                stock: stock
-            });
-        }
-        
+    function getCart(){return JSON.parse(localStorage.getItem('cart')||'[]')}
+    function saveCart(c){localStorage.setItem('cart',JSON.stringify(c));updateBadge()}
+    function updateBadge(){document.getElementById('cart-count').textContent=getCart().length}
+    function addToCart(id,name,price,image){
+        let cart=getCart();
+        let item=cart.find(i=>i.id===id);
+        if(item){item.qty++}else{cart.push({id:id,name:name,price:price,image:image,qty:1})}
         saveCart(cart);
-        showToast(`✅ ${name} добавлен в корзину`);
-        
-        // Анимация кнопки
-        const buttons = document.querySelectorAll(`.product-card[data-product-id="${id}"] .btn`);
-        buttons.forEach(btn => {
-            if (!btn.disabled) {
-                const originalText = btn.textContent;
-                btn.textContent = '✓ Добавлено!';
-                btn.classList.add('btn-added');
-                setTimeout(() => {
-                    btn.textContent = originalText;
-                    btn.classList.remove('btn-added');
-                }, 1000);
-            }
-        });
+        let btn=event.target;btn.textContent='Добавлено!';btn.classList.add('btn-added');
+        setTimeout(()=>{btn.textContent='В корзину';btn.classList.remove('btn-added')},1000)
     }
-    
-    // Инициализация при загрузке
-    document.addEventListener('DOMContentLoaded', function() {
-        updateBadge();
-        
-        // Проверка корзины при загрузке страницы
-        const cart = getCart();
-        console.log('Корзина загружена:', cart);
-    });
-    
-    // Обновление счетчика корзины при загрузке страницы
     updateBadge();
     </script>
 </body>

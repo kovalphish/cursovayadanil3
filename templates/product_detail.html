@@ -42,7 +42,7 @@
     <div class="container">
         <div class="product-detail">
             <div class="product-image">
-                <img src="{{ url_for('static', filename='uploads/' + product.image) }}" onerror="this.src='{{ url_for('static', filename='default.png') }}'">
+                <img src="{{ url_for('uploaded_file', fn=product.image) }}" onerror="this.src='{{ url_for('uploaded_file', fn='default.png') }}'">
             </div>
             <div class="product-info">
                 <h1>{{ product.name }}</h1>

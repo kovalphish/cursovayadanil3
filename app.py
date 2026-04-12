@@ -2,31 +2,25 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, session, send_from_directory, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
-import os, uuid, tempfile
+import os, uuid
 from functools import wraps
 from werkzeug.utils import secure_filename
 import logging
-import base64
-from io import BytesIO
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev_key_2026')
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# БД - используем SQLite в временной директории
-db_path = os.path.join(tempfile.gettempdir(), 'shop.db')
-db_url = os.environ.get('DATABASE_URL', f'sqlite:///{db_path}')
+# БД
+db_url = os.environ.get('DATABASE_URL', 'sqlite:///' + os.path.join(os.path.dirname(os.path.abspath(__file__)), 'instance', 'app.db'))
 if db_url.startswith('postgres://'):
     db_url = db_url.replace('postgres://', 'postgresql://')
 app.config['SQLALCHEMY_DATABASE_URI'] = db_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-
-# Используем временную директорию для загрузок
-UPLOAD_FOLDER = os.path.join(tempfile.gettempdir(), 'uploads')
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config['UPLOAD_FOLDER'] = os.environ.get('UPLOAD_FOLDER', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'uploads'))
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
+os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
 db = SQLAlchemy(app)
 ADMIN_PASS = os.environ.get('ADMIN_PASSWORD', 'admin123')
@@ -40,7 +34,6 @@ class Product(db.Model):
     stock = db.Column(db.Integer, default=0)
     description = db.Column(db.Text)
     image = db.Column(db.String(200), default='default.png')
-    image_data = db.Column(db.Text, nullable=True)  # Для хранения base64 изображений
 
 class Order(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -77,43 +70,24 @@ def allowed_file(fn):
     return '.' in fn and fn.rsplit('.',1)[1].lower() in {'png','jpg','jpeg','gif','webp'}
 
 def save_image(img_file):
-    """Сохраняет изображение и возвращает имя файла"""
-    try:
-        fn = secure_filename(img_file.filename)
-        ext = fn.rsplit('.',1)[1].lower()
-        name = f"{uuid.uuid4().hex}.{ext}"
-        filepath = os.path.join(app.config['UPLOAD_FOLDER'], name)
-        img_file.save(filepath)
-        logger.info(f"Изображение сохранено: {filepath}")
-        return name
-    except Exception as e:
-        logger.error(f"Ошибка сохранения изображения: {e}")
-        return 'default.png'
-
-def get_image_url(image_name):
-    """Возвращает URL для изображения"""
-    return url_for('uploaded_file', filename=image_name)
+    fn = secure_filename(img_file.filename)
+    ext = fn.rsplit('.',1)[1].lower()
+    name = f"{uuid.uuid4().hex}.{ext}"
+    img_file.save(os.path.join(app.config['UPLOAD_FOLDER'], name))
+    return name
 
 # --- API: товары (для корзины на JS) ---
 @app.route('/api/products')
 def api_products():
     products = Product.query.all()
-    return jsonify([{
-        'id':p.id,
-        'name':p.name,
-        'price':p.price,
-        'image':p.image,
-        'stock':p.stock,
-        'category':p.category or ''
-    } for p in products])
+    return jsonify([{'id':p.id,'name':p.name,'price':p.price,'image':p.image,'stock':p.stock,'category':p.category or ''} for p in products])
 
 # --- Страницы ---
 @app.route('/')
 def index():
     try:
-        products = Product.query.limit(12).all()
-    except Exception as e:
-        logger.error(f'Index error: {e}')
+        products = Product.query.limit(8).all()
+    except:
         products = []
     return render_template('index.html', products=products)
 
@@ -199,18 +173,14 @@ def product_add():
         try:
             img_name = 'default.png'
             f = request.files.get('image')
-            if f and allowed_file(f.filename): 
-                img_name = save_image(f)
+            if f and allowed_file(f.filename): img_name = save_image(f)
             p = Product(name=request.form['name'], category=request.form.get('category',''),
                        price=float(request.form['price']), stock=int(request.form.get('stock',0) or 0),
                        description=request.form.get('description',''), image=img_name)
-            db.session.add(p)
-            db.session.commit()
+            db.session.add(p); db.session.commit()
             flash('Товар добавлен','success')
         except Exception as e:
-            db.session.rollback()
-            logger.error(f'Product add error: {e}')
-            flash(f'Ошибка: {e}','error')
+            db.session.rollback(); flash(f'Ошибка: {e}','error')
         return redirect(url_for('admin'))
     return render_template('product_form.html', title='Добавить товар', product=None)
 
@@ -226,14 +196,10 @@ def product_edit(id):
             p.stock = int(request.form.get('stock',0) or 0)
             p.description = request.form.get('description','')
             f = request.files.get('image')
-            if f and allowed_file(f.filename): 
-                p.image = save_image(f)
-            db.session.commit()
-            flash('Товар обновлен','success')
+            if f and f.filename and allowed_file(f.filename): p.image = save_image(f)
+            db.session.commit(); flash('Товар обновлен','success')
         except Exception as e:
-            db.session.rollback()
-            logger.error(f'Product edit error: {e}')
-            flash(f'Ошибка: {e}','error')
+            db.session.rollback(); flash(f'Ошибка: {e}','error')
         return redirect(url_for('admin'))
     return render_template('product_form.html', title='Редактировать товар', product=p)
 
@@ -241,106 +207,41 @@ def product_edit(id):
 @login_required
 def product_delete(id):
     try:
-        db.session.delete(Product.query.get_or_404(id))
-        db.session.commit()
-        flash('Удалено','success')
-    except Exception as e:
-        db.session.rollback()
-        logger.error(f'Product delete error: {e}')
-        flash('Ошибка','error')
+        db.session.delete(Product.query.get_or_404(id)); db.session.commit(); flash('Удалено','success')
+    except: db.session.rollback(); flash('Ошибка','error')
     return redirect(url_for('admin'))
 
 @app.route('/admin/order/status/<int:id>', methods=['POST'])
 @login_required
 def order_status(id):
     try:
-        o = Order.query.get_or_404(id)
-        o.status = request.form.get('status','new')
-        db.session.commit()
-        flash('Статус обновлен','success')
-    except Exception as e:
-        db.session.rollback()
-        logger.error(f'Order status error: {e}')
-        flash('Ошибка','error')
+        o = Order.query.get_or_404(id); o.status = request.form.get('status','new')
+        db.session.commit(); flash('Статус обновлен','success')
+    except: db.session.rollback(); flash('Ошибка','error')
     return redirect(url_for('admin'))
 
 @app.route('/admin/order/delete/<int:id>')
 @login_required
 def order_delete(id):
     try:
-        db.session.delete(Order.query.get_or_404(id))
-        db.session.commit()
-        flash('Удалено','success')
-    except Exception as e:
-        db.session.rollback()
-        logger.error(f'Order delete error: {e}')
-        flash('Ошибка','error')
+        db.session.delete(Order.query.get_or_404(id)); db.session.commit(); flash('Удалено','success')
+    except: db.session.rollback(); flash('Ошибка','error')
     return redirect(url_for('admin'))
 
 # --- Статика ---
-@app.route('/static/uploads/<filename>')
-def uploaded_file(filename):
-    """Отдача загруженных изображений"""
-    try:
-        # Пытаемся отдать из папки загрузок
-        return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
-    except Exception as e:
-        logger.error(f"File not found: {filename}, error: {e}")
-        # Если файла нет, отдаем заглушку через data:image
-        return send_from_directory('static', 'default.png')
-
-# Создаем заглушку для default.png если её нет
-@app.route('/static/default.png')
-def default_image():
+@app.route('/static/uploads/<fn>')
+def uploaded_file(fn):
+    path = os.path.join(app.config['UPLOAD_FOLDER'], fn)
+    if os.path.exists(path): return send_from_directory(app.config['UPLOAD_FOLDER'], fn)
     return send_from_directory('static', 'default.png')
+
+@app.errorhandler(404)
+def e404(e): return render_template('index.html', products=[]), 404
 
 # --- Инициализация ---
 with app.app_context():
-    try:
-        db.create_all()
-        
-        # Создаем заглушку для default.png в папке static если её нет
-        static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static')
-        os.makedirs(static_dir, exist_ok=True)
-        default_img_path = os.path.join(static_dir, 'default.png')
-        
-        if not os.path.exists(default_img_path):
-            # Создаем простой SVG как PNG заглушку
-            svg_content = '''<svg width="200" height="200" xmlns="http://www.w3.org/2000/svg">
-                <rect width="200" height="200" fill="#0066ff"/>
-                <text x="100" y="110" font-size="16" fill="white" text-anchor="middle">Нет фото</text>
-            </svg>'''
-            
-            # Конвертируем SVG в PNG через base64 (просто сохраняем как SVG с расширением .png для простоты)
-            with open(default_img_path, 'w') as f:
-                f.write(svg_content)
-            logger.info("Создан default.png (как SVG)")
-        
-        # Добавляем тестовые товары
-        if Product.query.count() == 0:
-            test_products = [
-                Product(name="Холодильник Samsung RB-30J3000WW", category="Холодильники", price=49990, stock=10, 
-                       description="Отличный холодильник с системой No Frost", image="default.png"),
-                Product(name="Стиральная машина LG F2J3HS0W", category="Стиральные машины", price=38990, stock=8,
-                       description="Стиральная машина с прямым приводом", image="default.png"),
-                Product(name="Телевизор Sony KD-55X80J", category="Телевизоры", price=69990, stock=5,
-                       description="4K HDR телевизор с Android TV", image="default.png"),
-                Product(name="Микроволновая печь Panasonic NN-ST342M", category="Микроволновые печи", price=8990, stock=15,
-                       description="Микроволновая печь с грилем", image="default.png"),
-                Product(name="Пылесос Dyson V8 Absolute", category="Пылесосы", price=32990, stock=7,
-                       description="Беспроводной пылесос высокой мощности", image="default.png"),
-                Product(name="Электрочайник Bosch TWK3A011", category="Мелкая техника", price=2490, stock=20,
-                       description="Электрический чайник из нержавеющей стали", image="default.png"),
-            ]
-            for product in test_products:
-                db.session.add(product)
-            db.session.commit()
-            logger.info(f"Добавлено {len(test_products)} тестовых товаров")
-            
-    except Exception as e:
-        logger.error(f'DB init error: {e}')
+    try: db.create_all()
+    except Exception as e: logger.error(f'DB init: {e}')
 
 application = app
-
-if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+if __name__ == '__main__': app.run(debug=False)
