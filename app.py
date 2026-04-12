@@ -6,6 +6,7 @@ import os, uuid
 from functools import wraps
 from werkzeug.utils import secure_filename
 import logging
+from PIL import Image
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev_key_2026')
@@ -69,19 +70,39 @@ def login_required(f):
     return wrap
 
 def allowed_file(fn):
-    return '.' in fn and fn.rsplit('.',1)[1].lower() in {'png','jpg','jpeg','gif','webp'}
+    """Поддержка всех популярных форматов изображений"""
+    ALLOWED_EXTENSIONS = {
+        'png', 'jpg', 'jpeg', 'gif', 'webp', 
+        'bmp', 'svg', 'ico', 'tiff', 'heic', 'heif'
+    }
+    return '.' in fn and fn.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 def save_image(img_file):
     """Сохраняет изображение и возвращает имя файла"""
     try:
         fn = secure_filename(img_file.filename)
-        ext = fn.rsplit('.',1)[1].lower()
+        ext = fn.rsplit('.', 1)[1].lower()
         name = f"{uuid.uuid4().hex}.{ext}"
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], name)
+        
+        # Сохраняем файл
         img_file.save(filepath)
         
         # Проверяем, что файл действительно сохранился
         if os.path.exists(filepath) and os.path.getsize(filepath) > 0:
+            # Опционально: конвертируем HEIC в JPEG (требует pillow-heif)
+            if ext in ['heic', 'heif']:
+                try:
+                    from pillow_heif import register_heif_opener
+                    register_heif_opener()
+                    with Image.open(filepath) as img:
+                        new_name = f"{uuid.uuid4().hex}.jpg"
+                        new_path = os.path.join(app.config['UPLOAD_FOLDER'], new_name)
+                        img.convert('RGB').save(new_path, 'JPEG', quality=85)
+                        os.remove(filepath)
+                        return new_name
+                except ImportError:
+                    logger.warning("pillow-heif not installed, HEIC files may not display correctly")
             return name
         else:
             logger.error(f"Failed to save image: {filepath}")
@@ -100,7 +121,7 @@ def api_products():
 @app.route('/')
 def index():
     try:
-        products = Product.query.limit(8).all()
+        products = Product.query.limit(12).all()  # Увеличил до 12 товаров
     except Exception as e:
         logger.error(f"Index error: {e}")
         products = []
