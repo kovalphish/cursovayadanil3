@@ -6,20 +6,30 @@ import os, uuid
 from functools import wraps
 from werkzeug.utils import secure_filename
 import logging
-from PIL import Image
+import json
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev_key_2026')
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# БД
-db_url = os.environ.get('DATABASE_URL', 'sqlite:////tmp/app.db')
-if db_url.startswith('postgres://'):
+# БД - для Vercel используем PostgreSQL или SQLite в /tmp
+# Если на Vercel, используем PostgreSQL, иначе SQLite
+if os.environ.get('VERCEL'):
+    # На Vercel используем PostgreSQL (нужно добавить в настройках)
+    db_url = os.environ.get('DATABASE_URL', '')
+    if not db_url:
+        # Если нет PostgreSQL, используем SQLite в /tmp (временное хранилище)
+        db_url = 'sqlite:////tmp/app.db'
+        logger.warning("Using SQLite in /tmp - data will be lost on redeploy!")
+elif db_url.startswith('postgres://'):
     db_url = db_url.replace('postgres://', 'postgresql://')
+else:
+    db_url = os.environ.get('DATABASE_URL', 'sqlite:////tmp/app.db')
+    
 app.config['SQLALCHEMY_DATABASE_URI'] = db_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['UPLOAD_FOLDER'] = os.environ.get('UPLOAD_FOLDER', '/tmp/uploads')
+app.config['UPLOAD_FOLDER'] = '/tmp/uploads'  # Vercel позволяет писать в /tmp
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
@@ -70,39 +80,18 @@ def login_required(f):
     return wrap
 
 def allowed_file(fn):
-    """Поддержка всех популярных форматов изображений"""
-    ALLOWED_EXTENSIONS = {
-        'png', 'jpg', 'jpeg', 'gif', 'webp', 
-        'bmp', 'svg', 'ico', 'tiff', 'heic', 'heif'
-    }
+    ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg'}
     return '.' in fn and fn.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 def save_image(img_file):
-    """Сохраняет изображение и возвращает имя файла"""
     try:
         fn = secure_filename(img_file.filename)
         ext = fn.rsplit('.', 1)[1].lower()
         name = f"{uuid.uuid4().hex}.{ext}"
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], name)
-        
-        # Сохраняем файл
         img_file.save(filepath)
         
-        # Проверяем, что файл действительно сохранился
         if os.path.exists(filepath) and os.path.getsize(filepath) > 0:
-            # Опционально: конвертируем HEIC в JPEG (требует pillow-heif)
-            if ext in ['heic', 'heif']:
-                try:
-                    from pillow_heif import register_heif_opener
-                    register_heif_opener()
-                    with Image.open(filepath) as img:
-                        new_name = f"{uuid.uuid4().hex}.jpg"
-                        new_path = os.path.join(app.config['UPLOAD_FOLDER'], new_name)
-                        img.convert('RGB').save(new_path, 'JPEG', quality=85)
-                        os.remove(filepath)
-                        return new_name
-                except ImportError:
-                    logger.warning("pillow-heif not installed, HEIC files may not display correctly")
             return name
         else:
             logger.error(f"Failed to save image: {filepath}")
@@ -111,17 +100,21 @@ def save_image(img_file):
         logger.error(f"Error saving image: {e}")
         return 'default.png'
 
-# --- API: товары (для корзины на JS) ---
+# --- API: товары ---
 @app.route('/api/products')
 def api_products():
-    products = Product.query.all()
-    return jsonify([{'id':p.id,'name':p.name,'price':p.price,'image':p.image,'stock':p.stock,'category':p.category or ''} for p in products])
+    try:
+        products = Product.query.all()
+        return jsonify([{'id':p.id,'name':p.name,'price':p.price,'image':p.image,'stock':p.stock,'category':p.category or ''} for p in products])
+    except Exception as e:
+        logger.error(f"API error: {e}")
+        return jsonify([])
 
 # --- Страницы ---
 @app.route('/')
 def index():
     try:
-        products = Product.query.limit(12).all()  # Увеличил до 12 товаров
+        products = Product.query.limit(12).all()
     except Exception as e:
         logger.error(f"Index error: {e}")
         products = []
@@ -146,34 +139,43 @@ def products_page():
 
 @app.route('/product/<int:id>')
 def product_detail(id):
-    p = Product.query.get_or_404(id)
-    return render_template('product_detail.html', product=p)
+    try:
+        p = Product.query.get_or_404(id)
+        return render_template('product_detail.html', product=p)
+    except Exception as e:
+        logger.error(f"Product detail error: {e}")
+        return render_template('index.html', products=[]), 404
 
-# --- Корзина (JS + localStorage) ---
+# --- Корзина ---
 @app.route('/cart')
 def cart_page():
     return render_template('cart.html')
 
 @app.route('/checkout', methods=['POST'])
 def checkout():
-    data = request.get_json(force=True)
-    if not data or not data.get('items'):
-        return jsonify({'error':'Корзина пуста'}), 400
-    name = data.get('name','').strip()
-    phone = data.get('phone','').strip()
-    address = data.get('address','').strip()
-    if not all([name, phone, address]):
-        return jsonify({'error':'Заполните все поля'}), 400
     try:
+        data = request.get_json(force=True)
+        if not data or not data.get('items'):
+            return jsonify({'error':'Корзина пуста'}), 400
+        
+        name = data.get('name','').strip()
+        phone = data.get('phone','').strip()
+        address = data.get('address','').strip()
+        
+        if not all([name, phone, address]):
+            return jsonify({'error':'Заполните все поля'}), 400
+        
         total = sum(i['price']*i['qty'] for i in data['items'])
         order = Order(customer_name=name, customer_phone=phone, customer_address=address, total=total)
         db.session.add(order)
         db.session.flush()
+        
         for i in data['items']:
             db.session.add(OrderItem(order_id=order.id, product_id=i['id'], product_name=i['name'], price=i['price'], quantity=i['qty']))
             p = Product.query.get(i['id'])
             if p: 
                 p.stock = max(0, p.stock - i['qty'])
+        
         db.session.commit()
         return jsonify({'ok':True, 'order_id':order.id})
     except Exception as e:
@@ -213,12 +215,10 @@ def product_add():
     if request.method == 'POST':
         img_name = 'default.png'
         try:
-            # Сначала сохраняем изображение
             f = request.files.get('image')
             if f and f.filename and allowed_file(f.filename):
                 img_name = save_image(f)
             
-            # Проверяем обязательные поля
             if not request.form.get('name'):
                 flash('Название товара обязательно', 'error')
                 return redirect(url_for('admin'))
@@ -227,7 +227,6 @@ def product_add():
                 flash('Цена товара обязательна', 'error')
                 return redirect(url_for('admin'))
             
-            # Создаем товар
             p = Product(
                 name=request.form['name'], 
                 category=request.form.get('category',''),
@@ -242,11 +241,11 @@ def product_add():
         except ValueError as e:
             db.session.rollback()
             flash(f'Ошибка в формате данных: {e}', 'error')
-            logger.error(f"Value error in product_add: {e}")
+            logger.error(f"Value error: {e}")
         except Exception as e:
             db.session.rollback()
             flash(f'Ошибка при добавлении товара: {e}', 'error')
-            logger.error(f"Error in product_add: {e}")
+            logger.error(f"Error: {e}")
         return redirect(url_for('admin'))
     return render_template('product_form.html', title='Добавить товар', product=None)
 
@@ -257,20 +256,17 @@ def product_edit(id):
     if request.method == 'POST':
         old_image = p.image
         try:
-            # Обновляем данные
             p.name = request.form['name']
             p.category = request.form.get('category','')
             p.price = float(request.form['price'])
             p.stock = int(request.form.get('stock',0) or 0)
             p.description = request.form.get('description','')
             
-            # Сохраняем новое изображение, если загружено
             f = request.files.get('image')
             if f and f.filename and allowed_file(f.filename):
                 new_image = save_image(f)
                 if new_image and new_image != 'default.png':
                     p.image = new_image
-                    # Удаляем старое изображение, если оно не default.png
                     if old_image and old_image != 'default.png':
                         old_path = os.path.join(app.config['UPLOAD_FOLDER'], old_image)
                         if os.path.exists(old_path):
@@ -281,14 +277,10 @@ def product_edit(id):
             
             db.session.commit()
             flash('Товар успешно обновлен', 'success')
-        except ValueError as e:
-            db.session.rollback()
-            flash(f'Ошибка в формате данных: {e}', 'error')
-            logger.error(f"Value error in product_edit: {e}")
         except Exception as e:
             db.session.rollback()
             flash(f'Ошибка при обновлении товара: {e}', 'error')
-            logger.error(f"Error in product_edit: {e}")
+            logger.error(f"Error: {e}")
         return redirect(url_for('admin'))
     return render_template('product_form.html', title='Редактировать товар', product=p)
 
@@ -297,7 +289,6 @@ def product_edit(id):
 def product_delete(id):
     try:
         p = Product.query.get_or_404(id)
-        # Удаляем изображение, если оно не default.png
         if p.image and p.image != 'default.png':
             image_path = os.path.join(app.config['UPLOAD_FOLDER'], p.image)
             if os.path.exists(image_path):
@@ -312,7 +303,7 @@ def product_delete(id):
     except Exception as e:
         db.session.rollback()
         flash(f'Ошибка при удалении товара: {e}', 'error')
-        logger.error(f"Error in product_delete: {e}")
+        logger.error(f"Error: {e}")
     return redirect(url_for('admin'))
 
 @app.route('/admin/order/status/<int:id>', methods=['POST'])
@@ -326,7 +317,7 @@ def order_status(id):
     except Exception as e:
         db.session.rollback()
         flash(f'Ошибка при обновлении статуса: {e}', 'error')
-        logger.error(f"Error in order_status: {e}")
+        logger.error(f"Error: {e}")
     return redirect(url_for('admin'))
 
 @app.route('/admin/order/delete/<int:id>')
@@ -339,7 +330,7 @@ def order_delete(id):
     except Exception as e:
         db.session.rollback()
         flash(f'Ошибка при удалении заказа: {e}', 'error')
-        logger.error(f"Error in order_delete: {e}")
+        logger.error(f"Error: {e}")
     return redirect(url_for('admin'))
 
 # --- Статика ---
@@ -358,19 +349,38 @@ def e404(e):
         products = []
     return render_template('index.html', products=products), 404
 
+@app.errorhandler(500)
+def e500(e):
+    logger.error(f"500 error: {e}")
+    return render_template('index.html', products=[]), 500
+
 # --- Инициализация ---
 def init_db():
-    """Инициализация базы данных с проверкой существования таблиц"""
     with app.app_context():
         try:
-            # Проверяем, существуют ли таблицы
             db.create_all()
             logger.info("Database initialized successfully")
+            
+            # Добавляем тестовые товары если база пустая
+            if Product.query.count() == 0:
+                test_products = [
+                    Product(name="Холодильник Samsung", category="Холодильники", price=45000, stock=10, image="default.png"),
+                    Product(name="Стиральная машина LG", category="Стиральные машины", price=35000, stock=15, image="default.png"),
+                    Product(name="Микроволновка Panasonic", category="Микроволновые печи", price=12000, stock=20, image="default.png"),
+                    Product(name="Пылесос Philips", category="Пылесосы", price=18000, stock=8, image="default.png"),
+                ]
+                for p in test_products:
+                    db.session.add(p)
+                db.session.commit()
+                logger.info("Test products added")
+                
         except Exception as e:
             logger.error(f"Database initialization error: {e}")
 
+# Запускаем инициализацию
 init_db()
 
+# Для Vercel
 application = app
 
 if __name__ == '__main__':
