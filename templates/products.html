@@ -73,7 +73,7 @@
         <div class="products-grid">
             {% for product in products %}
             <article class="product-card">
-                <img src="{{ url_for('get_image', filename=product.image) }}">
+                <img src="{{ url_for('static', filename='uploads/' + product.image) }}" alt="{{ product.name }}" class="product-image" onerror="this.src='{{ url_for('static', filename='default.png') }}'">
                 <div class="product-info">
                     <h3 class="product-name">{{ product.name }}</h3>
                     <div class="product-price">{{ product.price }} ₽</div>

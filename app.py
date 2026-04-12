@@ -1,33 +1,29 @@
 # ТехноМаркет — интернет-магазин бытовой техники
-from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify
+from flask import Flask, render_template, request, redirect, url_for, flash, session, send_from_directory, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
-import os
+import os, uuid
 from functools import wraps
+from werkzeug.utils import secure_filename
 import logging
-import base64
-from io import BytesIO
 
 app = Flask(__name__)
-app.secret_key = 'secret_key_2026'
+app.secret_key = os.environ.get('SECRET_KEY', 'dev_key_2026')
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# БД - для Vercel используем PostgreSQL или SQLite
-DATABASE_URL = os.environ.get('DATABASE_URL')
-if DATABASE_URL and DATABASE_URL.startswith('postgres://'):
-    DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://', 1)
-
-if DATABASE_URL:
-    app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
-else:
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///shop.db'
-
+# БД
+db_url = os.environ.get('DATABASE_URL', 'sqlite:////tmp/app.db')
+if db_url.startswith('postgres://'):
+    db_url = db_url.replace('postgres://', 'postgresql://')
+app.config['SQLALCHEMY_DATABASE_URI'] = db_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-db = SQLAlchemy(app)
+app.config['UPLOAD_FOLDER'] = os.environ.get('UPLOAD_FOLDER', '/tmp/uploads')
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
+os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
-# Пароль админа
-ADMIN_PASS = 'admin123'
+db = SQLAlchemy(app)
+ADMIN_PASS = os.environ.get('ADMIN_PASSWORD', 'admin123')
 
 # --- Модели ---
 class Product(db.Model):
@@ -37,7 +33,7 @@ class Product(db.Model):
     price = db.Column(db.Float, nullable=False)
     stock = db.Column(db.Integer, default=0)
     description = db.Column(db.Text)
-    image_base64 = db.Column(db.Text)  # Храним картинку в base64
+    image = db.Column(db.String(200), default='default.png')
 
 class Order(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -47,6 +43,7 @@ class Order(db.Model):
     total = db.Column(db.Float, default=0)
     status = db.Column(db.String(50), default='new')
     date = db.Column(db.DateTime, default=datetime.utcnow)
+    items = db.relationship('OrderItem', backref='order', cascade='all, delete-orphan')
 
 class OrderItem(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -57,269 +54,194 @@ class OrderItem(db.Model):
     quantity = db.Column(db.Integer, default=1)
 
 # --- Утилиты ---
+@app.teardown_appcontext
+def close_db(exc):
+    if exc: db.session.rollback()
+    db.session.remove()
+
 def login_required(f):
     @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if not session.get('admin_logged_in'):
-            flash('Сначала войдите в админку', 'error')
-            return redirect(url_for('admin_login'))
-        return f(*args, **kwargs)
-    return decorated_function
+    def wrap(*a, **kw):
+        if not session.get('admin'): return redirect(url_for('admin_login'))
+        return f(*a, **kw)
+    return wrap
 
-def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in {'png', 'jpg', 'jpeg', 'gif', 'webp'}
+def allowed_file(fn):
+    return '.' in fn and fn.rsplit('.',1)[1].lower() in {'png','jpg','jpeg','gif','webp'}
 
-# --- Страницы сайта ---
+def save_image(img_file):
+    fn = secure_filename(img_file.filename)
+    ext = fn.rsplit('.',1)[1].lower()
+    name = f"{uuid.uuid4().hex}.{ext}"
+    img_file.save(os.path.join(app.config['UPLOAD_FOLDER'], name))
+    return name
+
+# --- API: товары (для корзины на JS) ---
+@app.route('/api/products')
+def api_products():
+    products = Product.query.all()
+    return jsonify([{'id':p.id,'name':p.name,'price':p.price,'image':p.image,'stock':p.stock,'category':p.category or ''} for p in products])
+
+# --- Страницы ---
 @app.route('/')
 def index():
-    products = Product.query.limit(12).all()
+    try:
+        products = Product.query.limit(8).all()
+    except:
+        products = []
     return render_template('index.html', products=products)
 
 @app.route('/products')
 def products_page():
-    search = request.args.get('search', '')
-    cat = request.args.get('category', '')
-    
-    query = Product.query
-    if search:
-        query = query.filter(Product.name.ilike(f'%{search}%'))
-    if cat:
-        query = query.filter_by(category=cat)
-    
-    products = query.all()
-    categories = db.session.query(Product.category).distinct().all()
-    categories = [c[0] for c in categories if c[0]]
-    
-    return render_template('products.html', products=products, categories=categories, 
-                          search=search, current_category=cat)
+    search = request.args.get('search','')
+    cat = request.args.get('category','')
+    q = Product.query
+    if search: q = q.filter(Product.name.ilike(f'%{search}%'))
+    if cat: q = q.filter_by(category=cat)
+    try:
+        prods = q.all()
+        categories = [c[0] for c in db.session.query(Product.category).distinct() if c[0]]
+    except:
+        prods, categories = [], []
+    return render_template('products.html', products=prods, categories=categories, search=search, current_category=cat)
 
 @app.route('/product/<int:id>')
 def product_detail(id):
-    product = Product.query.get_or_404(id)
-    return render_template('product_detail.html', product=product)
+    p = Product.query.get_or_404(id)
+    return render_template('product_detail.html', product=p)
 
+# --- Корзина (JS + localStorage) ---
 @app.route('/cart')
-def cart():
+def cart_page():
     return render_template('cart.html')
 
 @app.route('/checkout', methods=['POST'])
 def checkout():
+    data = request.get_json(force=True)
+    if not data or not data.get('items'):
+        return jsonify({'error':'Корзина пуста'}), 400
+    name = data.get('name','').strip()
+    phone = data.get('phone','').strip()
+    address = data.get('address','').strip()
+    if not all([name, phone, address]):
+        return jsonify({'error':'Заполните все поля'}), 400
     try:
-        data = request.json
-        if not data or not data.get('items'):
-            return jsonify({'error': 'Корзина пуста'}), 400
-        
-        name = data.get('name', '').strip()
-        phone = data.get('phone', '').strip()
-        address = data.get('address', '').strip()
-        
-        if not name or not phone or not address:
-            return jsonify({'error': 'Заполните все поля'}), 400
-        
-        total = sum(item['price'] * item['quantity'] for item in data['items'])
-        
-        order = Order(
-            customer_name=name,
-            customer_phone=phone,
-            customer_address=address,
-            total=total
-        )
+        total = sum(i['price']*i['qty'] for i in data['items'])
+        order = Order(customer_name=name, customer_phone=phone, customer_address=address, total=total)
         db.session.add(order)
         db.session.flush()
-        
-        for item in data['items']:
-            order_item = OrderItem(
-                order_id=order.id,
-                product_id=item['id'],
-                product_name=item['name'],
-                price=item['price'],
-                quantity=item['quantity']
-            )
-            db.session.add(order_item)
-            
-            # Обновляем остаток
-            product = Product.query.get(item['id'])
-            if product:
-                product.stock = max(0, product.stock - item['quantity'])
-        
+        for i in data['items']:
+            db.session.add(OrderItem(order_id=order.id, product_id=i['id'], product_name=i['name'], price=i['price'], quantity=i['qty']))
+            p = Product.query.get(i['id'])
+            if p: p.stock = max(0, p.stock - i['qty'])
         db.session.commit()
-        return jsonify({'success': True, 'order_id': order.id})
+        return jsonify({'ok':True, 'order_id':order.id})
     except Exception as e:
         db.session.rollback()
-        logger.error(f"Checkout error: {e}")
-        return jsonify({'error': 'Ошибка оформления заказа'}), 500
+        logger.error(f'Checkout: {e}')
+        return jsonify({'error':'Ошибка оформления'}), 500
 
 # --- Админка ---
-@app.route('/admin/login', methods=['GET', 'POST'])
+@app.route('/admin/login', methods=['GET','POST'])
 def admin_login():
     if request.method == 'POST':
         if request.form.get('password') == ADMIN_PASS:
-            session['admin_logged_in'] = True
-            flash('Добро пожаловать в админ-панель', 'success')
-            return redirect(url_for('admin_dashboard'))
-        else:
-            flash('Неверный пароль', 'error')
+            session['admin'] = True
+            return redirect(url_for('admin'))
+        flash('Неверный пароль','error')
     return render_template('admin_login.html')
 
 @app.route('/admin/logout')
 def admin_logout():
-    session.pop('admin_logged_in', None)
-    flash('Вы вышли из админ-панели', 'success')
+    session.pop('admin', None)
     return redirect(url_for('index'))
 
 @app.route('/admin')
-def admin_dashboard():
-    if not session.get('admin_logged_in'):
-        return redirect(url_for('admin_login'))
-    
-    products = Product.query.all()
-    orders = Order.query.order_by(Order.date.desc()).all()
-    return render_template('admin.html', products=products, orders=orders)
-
-@app.route('/admin/product/add', methods=['GET', 'POST'])
 @login_required
-def admin_product_add():
+def admin():
+    try:
+        prods = Product.query.all()
+        orders = Order.query.order_by(Order.date.desc()).all()
+    except:
+        prods, orders = [], []
+    return render_template('admin.html', products=prods, orders=orders)
+
+@app.route('/admin/product/add', methods=['GET','POST'])
+@login_required
+def product_add():
     if request.method == 'POST':
         try:
-            name = request.form.get('name')
-            category = request.form.get('category', '')
-            price = float(request.form.get('price', 0))
-            stock = int(request.form.get('stock', 0))
-            description = request.form.get('description', '')
-            
-            # Обработка картинки
-            image_base64 = None
-            file = request.files.get('image')
-            if file and file.filename and allowed_file(file.filename):
-                data = file.read()
-                image_base64 = base64.b64encode(data).decode('utf-8')
-            
-            product = Product(
-                name=name,
-                category=category,
-                price=price,
-                stock=stock,
-                description=description,
-                image_base64=image_base64
-            )
-            db.session.add(product)
-            db.session.commit()
-            flash('Товар успешно добавлен', 'success')
+            img_name = 'default.png'
+            f = request.files.get('image')
+            if f and allowed_file(f.filename): img_name = save_image(f)
+            p = Product(name=request.form['name'], category=request.form.get('category',''),
+                       price=float(request.form['price']), stock=int(request.form.get('stock',0) or 0),
+                       description=request.form.get('description',''), image=img_name)
+            db.session.add(p); db.session.commit()
+            flash('Товар добавлен','success')
         except Exception as e:
-            db.session.rollback()
-            flash(f'Ошибка: {str(e)}', 'error')
-        return redirect(url_for('admin_dashboard'))
-    
+            db.session.rollback(); flash(f'Ошибка: {e}','error')
+        return redirect(url_for('admin'))
     return render_template('product_form.html', title='Добавить товар', product=None)
 
-@app.route('/admin/product/edit/<int:id>', methods=['GET', 'POST'])
+@app.route('/admin/product/edit/<int:id>', methods=['GET','POST'])
 @login_required
-def admin_product_edit(id):
-    product = Product.query.get_or_404(id)
-    
+def product_edit(id):
+    p = Product.query.get_or_404(id)
     if request.method == 'POST':
         try:
-            product.name = request.form.get('name')
-            product.category = request.form.get('category', '')
-            product.price = float(request.form.get('price', 0))
-            product.stock = int(request.form.get('stock', 0))
-            product.description = request.form.get('description', '')
-            
-            # Обработка новой картинки
-            file = request.files.get('image')
-            if file and file.filename and allowed_file(file.filename):
-                data = file.read()
-                product.image_base64 = base64.b64encode(data).decode('utf-8')
-            
-            db.session.commit()
-            flash('Товар успешно обновлен', 'success')
+            p.name = request.form['name']
+            p.category = request.form.get('category','')
+            p.price = float(request.form['price'])
+            p.stock = int(request.form.get('stock',0) or 0)
+            p.description = request.form.get('description','')
+            f = request.files.get('image')
+            if f and allowed_file(f.filename): p.image = save_image(f)
+            db.session.commit(); flash('Товар обновлен','success')
         except Exception as e:
-            db.session.rollback()
-            flash(f'Ошибка: {str(e)}', 'error')
-        return redirect(url_for('admin_dashboard'))
-    
-    return render_template('product_form.html', title='Редактировать товар', product=product)
+            db.session.rollback(); flash(f'Ошибка: {e}','error')
+        return redirect(url_for('admin'))
+    return render_template('product_form.html', title='Редактировать товар', product=p)
 
 @app.route('/admin/product/delete/<int:id>')
 @login_required
-def admin_product_delete(id):
+def product_delete(id):
     try:
-        product = Product.query.get_or_404(id)
-        db.session.delete(product)
-        db.session.commit()
-        flash('Товар удален', 'success')
-    except Exception as e:
-        db.session.rollback()
-        flash(f'Ошибка: {str(e)}', 'error')
-    return redirect(url_for('admin_dashboard'))
+        db.session.delete(Product.query.get_or_404(id)); db.session.commit(); flash('Удалено','success')
+    except: db.session.rollback(); flash('Ошибка','error')
+    return redirect(url_for('admin'))
 
-@app.route('/admin/order/update/<int:id>', methods=['POST'])
+@app.route('/admin/order/status/<int:id>', methods=['POST'])
 @login_required
-def admin_order_update(id):
+def order_status(id):
     try:
-        order = Order.query.get_or_404(id)
-        order.status = request.form.get('status')
-        db.session.commit()
-        flash('Статус заказа обновлен', 'success')
-    except Exception as e:
-        db.session.rollback()
-        flash(f'Ошибка: {str(e)}', 'error')
-    return redirect(url_for('admin_dashboard'))
+        o = Order.query.get_or_404(id); o.status = request.form.get('status','new')
+        db.session.commit(); flash('Статус обновлен','success')
+    except: db.session.rollback(); flash('Ошибка','error')
+    return redirect(url_for('admin'))
 
 @app.route('/admin/order/delete/<int:id>')
 @login_required
-def admin_order_delete(id):
+def order_delete(id):
     try:
-        order = Order.query.get_or_404(id)
-        db.session.delete(order)
-        db.session.commit()
-        flash('Заказ удален', 'success')
-    except Exception as e:
-        db.session.rollback()
-        flash(f'Ошибка: {str(e)}', 'error')
-    return redirect(url_for('admin_dashboard'))
+        db.session.delete(Order.query.get_or_404(id)); db.session.commit(); flash('Удалено','success')
+    except: db.session.rollback(); flash('Ошибка','error')
+    return redirect(url_for('admin'))
 
-# --- Вспомогательные маршруты ---
-@app.route('/product/image/<int:id>')
-def product_image(id):
-    product = Product.query.get_or_404(id)
-    if product.image_base64:
-        image_data = base64.b64decode(product.image_base64)
-        from flask import Response
-        return Response(image_data, mimetype='image/jpeg')
-    return send_default_image()
+# --- Статика ---
+@app.route('/static/uploads/<fn>')
+def uploaded_file(fn):
+    path = os.path.join(app.config['UPLOAD_FOLDER'], fn)
+    if os.path.exists(path): return send_from_directory(app.config['UPLOAD_FOLDER'], fn)
+    return send_from_directory('static', 'default.png')
 
-def send_default_image():
-    from flask import send_file
-    return send_file('static/default.png', mimetype='image/png')
+@app.errorhandler(404)
+def e404(e): return render_template('index.html', products=[]), 404
 
-# --- Инициализация БД ---
+# --- Инициализация ---
 with app.app_context():
-    db.create_all()
-    
-    # Добавляем тестовые товары если пусто
-    if Product.query.count() == 0:
-        test_products = [
-            Product(name="Холодильник Samsung RT-35", category="Холодильники", price=45990, stock=10, 
-                   description="Энергоэффективный холодильник с системой No Frost"),
-            Product(name="Стиральная машина LG F2J3HS0W", category="Стиральные", price=34990, stock=15,
-                   description="Стиральная машина с прямым приводом и паром"),
-            Product(name="Микроволновая печь Panasonic NN-GT261", category="Микроволновки", price=12990, stock=20,
-                   description="Микроволновка с грилем и автоприготовлением"),
-            Product(name="Пылесос Philips FC9350", category="Пылесосы", price=18990, stock=8,
-                   description="Мощный пылесос с аквафильтром"),
-            Product(name="Телевизор Samsung 55\"", category="Телевизоры", price=65990, stock=5,
-                   description="4K UHD телевизор с HDR"),
-            Product(name="Утюг Tefal FV9785", category="Утюги", price=5990, stock=25,
-                   description="Паровой утюг с керамической подошвой"),
-        ]
-        for p in test_products:
-            db.session.add(p)
-        db.session.commit()
-        print("Добавлены тестовые товары")
+    try: db.create_all()
+    except Exception as e: logger.error(f'DB init: {e}')
 
-# Для Vercel
-app = app
-
-if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+application = app
+if __name__ == '__main__': app.run(debug=False)
