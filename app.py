@@ -86,7 +86,7 @@ def api_products():
 @app.route('/')
 def index():
     try:
-        products = Product.query.limit(8).all()
+        products = Product.query.limit(12).all()
     except:
         products = []
     return render_template('index.html', products=products)
@@ -231,17 +231,63 @@ def order_delete(id):
 # --- Статика ---
 @app.route('/static/uploads/<fn>')
 def uploaded_file(fn):
-    path = os.path.join(app.config['UPLOAD_FOLDER'], fn)
-    if os.path.exists(path): return send_from_directory(app.config['UPLOAD_FOLDER'], fn)
+    # Пытаемся найти файл в папке загрузок
+    upload_path = os.path.join(app.config['UPLOAD_FOLDER'], fn)
+    if os.path.exists(upload_path):
+        return send_from_directory(app.config['UPLOAD_FOLDER'], fn)
+    
+    # Если файл не найден, возвращаем заглушку
     return send_from_directory('static', 'default.png')
+
+# Путь для доступа к загруженным изображениям из админки
+@app.route('/uploads/<filename>')
+def uploaded_file_alt(filename):
+    return uploaded_file(filename)
 
 @app.errorhandler(404)
 def e404(e): return render_template('index.html', products=[]), 404
 
-# --- Инициализация ---
+# --- Инициализация и добавление тестовых данных ---
 with app.app_context():
-    try: db.create_all()
-    except Exception as e: logger.error(f'DB init: {e}')
+    try:
+        db.create_all()
+        
+        # Добавляем тестовые товары, если база пуста
+        if Product.query.count() == 0:
+            test_products = [
+                Product(name="Холодильник Samsung RB-30J3000WW", category="Холодильники", price=49990, stock=10, 
+                       description="Отличный холодильник с системой No Frost", image="default.png"),
+                Product(name="Стиральная машина LG F2J3HS0W", category="Стиральные машины", price=38990, stock=8,
+                       description="Стиральная машина с прямым приводом", image="default.png"),
+                Product(name="Телевизор Sony KD-55X80J", category="Телевизоры", price=69990, stock=5,
+                       description="4K HDR телевизор с Android TV", image="default.png"),
+                Product(name="Микроволновая печь Panasonic NN-ST342M", category="Микроволновые печи", price=8990, stock=15,
+                       description="Микроволновая печь с грилем", image="default.png"),
+                Product(name="Пылесос Dyson V8 Absolute", category="Пылесосы", price=32990, stock=7,
+                       description="Беспроводной пылесос высокой мощности", image="default.png"),
+                Product(name="Электрочайник Bosch TWK3A011", category="Мелкая техника", price=2490, stock=20,
+                       description="Электрический чайник из нержавеющей стали", image="default.png"),
+                Product(name="Утюг Philips GC1905", category="Мелкая техника", price=1890, stock=25,
+                       description="Паровой утюг с керамической подошвой", image="default.png"),
+                Product(name="Посудомоечная машина Bosch SMS25AW01R", category="Посудомоечные машины", price=42990, stock=6,
+                       description="Полностью встраиваемая посудомоечная машина", image="default.png"),
+                Product(name="Мультиварка Redmond RMC-M90", category="Мелкая техника", price=5990, stock=12,
+                       description="Мультиварка с 50 программами", image="default.png"),
+                Product(name="Кондиционер Ballu BSD-09HN1", category="Климатическая техника", price=25990, stock=4,
+                       description="Сплит-система с инвертором", image="default.png"),
+                Product(name="Кофемашина De'Longhi ECAM22.110.B", category="Мелкая техника", price=45990, stock=3,
+                       description="Автоматическая кофемашина", image="default.png"),
+                Product(name="Фен Philips HP8232", category="Уход за волосами", price=2990, stock=18,
+                       description="Фен с ионизацией и 3 режимами", image="default.png")
+            ]
+            for product in test_products:
+                db.session.add(product)
+            db.session.commit()
+            logger.info("Добавлены тестовые товары")
+            
+    except Exception as e:
+        logger.error(f'DB init: {e}')
 
 application = app
-if __name__ == '__main__': app.run(debug=False)
+if __name__ == '__main__': 
+    app.run(debug=True, host='0.0.0.0', port=5000)
