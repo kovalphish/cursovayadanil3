@@ -42,7 +42,7 @@
     <div class="container">
         <div class="product-detail">
             <div class="product-image">
-                <img src="{{ url_for('uploaded_file', fn=product.image) }}" onerror="this.src='{{ url_for('uploaded_file', fn='default.png') }}'">
+                <img src="{{ product.image_data or '/static/default.png' }}" onerror="this.src='/static/default.png'">
             </div>
             <div class="product-info">
                 <h1>{{ product.name }}</h1>
@@ -53,7 +53,7 @@
                     <h3>Описание</h3>
                     <p>{{ product.description or 'Описание отсутствует' }}</p>
                 </div>
-                <button class="btn" onclick="addToCart({{ product.id }}, '{{ product.name }}', {{ product.price }}, '{{ product.image }}')">Добавить в корзину</button>
+                <button class="btn" onclick="addToCart({{ product.id }}, '{{ product.name }}', {{ product.price }}, '{{ product.image_data or '/static/default.png' }}')">Добавить в корзину</button>
             </div>
         </div>
     </div>

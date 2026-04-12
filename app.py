@@ -18,9 +18,13 @@ if db_url.startswith('postgres://'):
     db_url = db_url.replace('postgres://', 'postgresql://')
 app.config['SQLALCHEMY_DATABASE_URI'] = db_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['UPLOAD_FOLDER'] = os.environ.get('UPLOAD_FOLDER', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'uploads'))
+app.config['UPLOAD_FOLDER'] = os.environ.get('UPLOAD_FOLDER', '/tmp/uploads')
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
-os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+try:
+    os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+    logger.info(f'Upload folder ready: {app.config["UPLOAD_FOLDER"]}')
+except Exception as e:
+    logger.error(f'Failed to create upload folder: {e}')
 
 db = SQLAlchemy(app)
 ADMIN_PASS = os.environ.get('ADMIN_PASSWORD', 'admin123')
@@ -34,6 +38,7 @@ class Product(db.Model):
     stock = db.Column(db.Integer, default=0)
     description = db.Column(db.Text)
     image = db.Column(db.String(200), default='default.png')
+    image_data = db.Column(db.Text)
 
 class Order(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -69,18 +74,27 @@ def login_required(f):
 def allowed_file(fn):
     return '.' in fn and fn.rsplit('.',1)[1].lower() in {'png','jpg','jpeg','gif','webp'}
 
+import base64
+
 def save_image(img_file):
-    fn = secure_filename(img_file.filename)
-    ext = fn.rsplit('.',1)[1].lower()
-    name = f"{uuid.uuid4().hex}.{ext}"
-    img_file.save(os.path.join(app.config['UPLOAD_FOLDER'], name))
-    return name
+    """Конвертирует загруженный файл в base64 строку"""
+    data = img_file.read()
+    ext = img_file.filename.rsplit('.', 1)[1].lower()
+    mime = {'png': 'image/png', 'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'gif': 'image/gif', 'webp': 'image/webp'}.get(ext, 'image/jpeg')
+    b64 = base64.b64encode(data).decode('utf-8')
+    return f'data:{mime};base64,{b64}'
+
+def get_product_image(product):
+    """Возвращает data URL картинки товара или default"""
+    if product.image_data:
+        return product.image_data
+    return '/static/default.png'
 
 # --- API: товары (для корзины на JS) ---
 @app.route('/api/products')
 def api_products():
     products = Product.query.all()
-    return jsonify([{'id':p.id,'name':p.name,'price':p.price,'image':p.image,'stock':p.stock,'category':p.category or ''} for p in products])
+    return jsonify([{'id':p.id,'name':p.name,'price':p.price,'image':p.image_data or '/static/default.png','stock':p.stock,'category':p.category or ''} for p in products])
 
 # --- Страницы ---
 @app.route('/')
@@ -171,12 +185,13 @@ def admin():
 def product_add():
     if request.method == 'POST':
         try:
-            img_name = 'default.png'
+            img_data = None
             f = request.files.get('image')
-            if f and allowed_file(f.filename): img_name = save_image(f)
+            if f and f.filename and allowed_file(f.filename): img_data = save_image(f)
             p = Product(name=request.form['name'], category=request.form.get('category',''),
                        price=float(request.form['price']), stock=int(request.form.get('stock',0) or 0),
-                       description=request.form.get('description',''), image=img_name)
+                       description=request.form.get('description',''), image='uploaded',
+                       image_data=img_data)
             db.session.add(p); db.session.commit()
             flash('Товар добавлен','success')
         except Exception as e:
@@ -196,7 +211,9 @@ def product_edit(id):
             p.stock = int(request.form.get('stock',0) or 0)
             p.description = request.form.get('description','')
             f = request.files.get('image')
-            if f and f.filename and allowed_file(f.filename): p.image = save_image(f)
+            if f and f.filename and allowed_file(f.filename):
+                p.image_data = save_image(f)
+                p.image = 'uploaded'
             db.session.commit(); flash('Товар обновлен','success')
         except Exception as e:
             db.session.rollback(); flash(f'Ошибка: {e}','error')

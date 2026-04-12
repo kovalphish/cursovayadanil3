@@ -146,10 +146,10 @@
                 <div class="form-group">
                     <label>Изображение товара (PNG, JPG)</label>
                     <input type="file" name="image" accept="image/png,image/jpeg,image/gif,image/webp">
-                    {% if product and product.image != 'default.png' %}
+                    {% if product and product.image_data %}
                     <div class="current-image">
                         Текущее изображение:
-                        <img src="{{ url_for('uploaded_file', fn=product.image) }}" style="max-width: 200px; max-height: 200px; border-radius: 8px;">
+                        <img src="{{ product.image_data }}" style="max-width: 200px; max-height: 200px; border-radius: 8px;">
                     </div>
                     {% endif %}
                 </div>

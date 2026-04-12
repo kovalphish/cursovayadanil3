@@ -61,11 +61,11 @@
         <div class="products-grid">
             {% for product in products %}
             <article class="product-card">
-                <img src="{{ url_for('uploaded_file', fn=product.image) }}" alt="{{ product.name }}" class="product-image" onerror="this.src='{{ url_for('uploaded_file', fn='default.png') }}'">
+                <img src="{{ product.image_data or '/static/default.png' }}" alt="{{ product.name }}" class="product-image" onerror="this.src='/static/default.png'">
                 <div class="product-info">
                     <h3 class="product-name">{{ product.name }}</h3>
                     <div class="product-price">{{ product.price }} ₽</div>
-                    <button class="btn" onclick="addToCart({{ product.id }}, '{{ product.name }}', {{ product.price }}, '{{ product.image }}')">В корзину</button>
+                    <button class="btn" onclick="addToCart({{ product.id }}, '{{ product.name }}', {{ product.price }}, '{{ product.image_data or '/static/default.png' }}')">В корзину</button>
                 </div>
             </article>
             {% endfor %}
