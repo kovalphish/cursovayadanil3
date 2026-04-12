@@ -56,13 +56,15 @@ class OrderItem(db.Model):
 # --- Утилиты ---
 @app.teardown_appcontext
 def close_db(exc):
-    if exc: db.session.rollback()
+    if exc: 
+        db.session.rollback()
     db.session.remove()
 
 def login_required(f):
     @wraps(f)
     def wrap(*a, **kw):
-        if not session.get('admin'): return redirect(url_for('admin_login'))
+        if not session.get('admin'): 
+            return redirect(url_for('admin_login'))
         return f(*a, **kw)
     return wrap
 
@@ -70,11 +72,23 @@ def allowed_file(fn):
     return '.' in fn and fn.rsplit('.',1)[1].lower() in {'png','jpg','jpeg','gif','webp'}
 
 def save_image(img_file):
-    fn = secure_filename(img_file.filename)
-    ext = fn.rsplit('.',1)[1].lower()
-    name = f"{uuid.uuid4().hex}.{ext}"
-    img_file.save(os.path.join(app.config['UPLOAD_FOLDER'], name))
-    return name
+    """Сохраняет изображение и возвращает имя файла"""
+    try:
+        fn = secure_filename(img_file.filename)
+        ext = fn.rsplit('.',1)[1].lower()
+        name = f"{uuid.uuid4().hex}.{ext}"
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], name)
+        img_file.save(filepath)
+        
+        # Проверяем, что файл действительно сохранился
+        if os.path.exists(filepath) and os.path.getsize(filepath) > 0:
+            return name
+        else:
+            logger.error(f"Failed to save image: {filepath}")
+            return 'default.png'
+    except Exception as e:
+        logger.error(f"Error saving image: {e}")
+        return 'default.png'
 
 # --- API: товары (для корзины на JS) ---
 @app.route('/api/products')
@@ -87,7 +101,8 @@ def api_products():
 def index():
     try:
         products = Product.query.limit(8).all()
-    except:
+    except Exception as e:
+        logger.error(f"Index error: {e}")
         products = []
     return render_template('index.html', products=products)
 
@@ -96,12 +111,15 @@ def products_page():
     search = request.args.get('search','')
     cat = request.args.get('category','')
     q = Product.query
-    if search: q = q.filter(Product.name.ilike(f'%{search}%'))
-    if cat: q = q.filter_by(category=cat)
+    if search: 
+        q = q.filter(Product.name.ilike(f'%{search}%'))
+    if cat: 
+        q = q.filter_by(category=cat)
     try:
         prods = q.all()
         categories = [c[0] for c in db.session.query(Product.category).distinct() if c[0]]
-    except:
+    except Exception as e:
+        logger.error(f"Products page error: {e}")
         prods, categories = [], []
     return render_template('products.html', products=prods, categories=categories, search=search, current_category=cat)
 
@@ -133,7 +151,8 @@ def checkout():
         for i in data['items']:
             db.session.add(OrderItem(order_id=order.id, product_id=i['id'], product_name=i['name'], price=i['price'], quantity=i['qty']))
             p = Product.query.get(i['id'])
-            if p: p.stock = max(0, p.stock - i['qty'])
+            if p: 
+                p.stock = max(0, p.stock - i['qty'])
         db.session.commit()
         return jsonify({'ok':True, 'order_id':order.id})
     except Exception as e:
@@ -162,7 +181,8 @@ def admin():
     try:
         prods = Product.query.all()
         orders = Order.query.order_by(Order.date.desc()).all()
-    except:
+    except Exception as e:
+        logger.error(f"Admin error: {e}")
         prods, orders = [], []
     return render_template('admin.html', products=prods, orders=orders)
 
@@ -170,17 +190,42 @@ def admin():
 @login_required
 def product_add():
     if request.method == 'POST':
+        img_name = 'default.png'
         try:
-            img_name = 'default.png'
+            # Сначала сохраняем изображение
             f = request.files.get('image')
-            if f and allowed_file(f.filename): img_name = save_image(f)
-            p = Product(name=request.form['name'], category=request.form.get('category',''),
-                       price=float(request.form['price']), stock=int(request.form.get('stock',0) or 0),
-                       description=request.form.get('description',''), image=img_name)
-            db.session.add(p); db.session.commit()
-            flash('Товар добавлен','success')
+            if f and f.filename and allowed_file(f.filename):
+                img_name = save_image(f)
+            
+            # Проверяем обязательные поля
+            if not request.form.get('name'):
+                flash('Название товара обязательно', 'error')
+                return redirect(url_for('admin'))
+            
+            if not request.form.get('price'):
+                flash('Цена товара обязательна', 'error')
+                return redirect(url_for('admin'))
+            
+            # Создаем товар
+            p = Product(
+                name=request.form['name'], 
+                category=request.form.get('category',''),
+                price=float(request.form['price']), 
+                stock=int(request.form.get('stock',0) or 0),
+                description=request.form.get('description',''), 
+                image=img_name
+            )
+            db.session.add(p)
+            db.session.commit()
+            flash('Товар успешно добавлен', 'success')
+        except ValueError as e:
+            db.session.rollback()
+            flash(f'Ошибка в формате данных: {e}', 'error')
+            logger.error(f"Value error in product_add: {e}")
         except Exception as e:
-            db.session.rollback(); flash(f'Ошибка: {e}','error')
+            db.session.rollback()
+            flash(f'Ошибка при добавлении товара: {e}', 'error')
+            logger.error(f"Error in product_add: {e}")
         return redirect(url_for('admin'))
     return render_template('product_form.html', title='Добавить товар', product=None)
 
@@ -189,17 +234,40 @@ def product_add():
 def product_edit(id):
     p = Product.query.get_or_404(id)
     if request.method == 'POST':
+        old_image = p.image
         try:
+            # Обновляем данные
             p.name = request.form['name']
             p.category = request.form.get('category','')
             p.price = float(request.form['price'])
             p.stock = int(request.form.get('stock',0) or 0)
             p.description = request.form.get('description','')
+            
+            # Сохраняем новое изображение, если загружено
             f = request.files.get('image')
-            if f and allowed_file(f.filename): p.image = save_image(f)
-            db.session.commit(); flash('Товар обновлен','success')
+            if f and f.filename and allowed_file(f.filename):
+                new_image = save_image(f)
+                if new_image and new_image != 'default.png':
+                    p.image = new_image
+                    # Удаляем старое изображение, если оно не default.png
+                    if old_image and old_image != 'default.png':
+                        old_path = os.path.join(app.config['UPLOAD_FOLDER'], old_image)
+                        if os.path.exists(old_path):
+                            try:
+                                os.remove(old_path)
+                            except Exception as e:
+                                logger.error(f"Error deleting old image: {e}")
+            
+            db.session.commit()
+            flash('Товар успешно обновлен', 'success')
+        except ValueError as e:
+            db.session.rollback()
+            flash(f'Ошибка в формате данных: {e}', 'error')
+            logger.error(f"Value error in product_edit: {e}")
         except Exception as e:
-            db.session.rollback(); flash(f'Ошибка: {e}','error')
+            db.session.rollback()
+            flash(f'Ошибка при обновлении товара: {e}', 'error')
+            logger.error(f"Error in product_edit: {e}")
         return redirect(url_for('admin'))
     return render_template('product_form.html', title='Редактировать товар', product=p)
 
@@ -207,41 +275,82 @@ def product_edit(id):
 @login_required
 def product_delete(id):
     try:
-        db.session.delete(Product.query.get_or_404(id)); db.session.commit(); flash('Удалено','success')
-    except: db.session.rollback(); flash('Ошибка','error')
+        p = Product.query.get_or_404(id)
+        # Удаляем изображение, если оно не default.png
+        if p.image and p.image != 'default.png':
+            image_path = os.path.join(app.config['UPLOAD_FOLDER'], p.image)
+            if os.path.exists(image_path):
+                try:
+                    os.remove(image_path)
+                except Exception as e:
+                    logger.error(f"Error deleting image: {e}")
+        
+        db.session.delete(p)
+        db.session.commit()
+        flash('Товар успешно удален', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Ошибка при удалении товара: {e}', 'error')
+        logger.error(f"Error in product_delete: {e}")
     return redirect(url_for('admin'))
 
 @app.route('/admin/order/status/<int:id>', methods=['POST'])
 @login_required
 def order_status(id):
     try:
-        o = Order.query.get_or_404(id); o.status = request.form.get('status','new')
-        db.session.commit(); flash('Статус обновлен','success')
-    except: db.session.rollback(); flash('Ошибка','error')
+        o = Order.query.get_or_404(id)
+        o.status = request.form.get('status','new')
+        db.session.commit()
+        flash('Статус заказа обновлен', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Ошибка при обновлении статуса: {e}', 'error')
+        logger.error(f"Error in order_status: {e}")
     return redirect(url_for('admin'))
 
 @app.route('/admin/order/delete/<int:id>')
 @login_required
 def order_delete(id):
     try:
-        db.session.delete(Order.query.get_or_404(id)); db.session.commit(); flash('Удалено','success')
-    except: db.session.rollback(); flash('Ошибка','error')
+        db.session.delete(Order.query.get_or_404(id))
+        db.session.commit()
+        flash('Заказ успешно удален', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Ошибка при удалении заказа: {e}', 'error')
+        logger.error(f"Error in order_delete: {e}")
     return redirect(url_for('admin'))
 
 # --- Статика ---
 @app.route('/static/uploads/<fn>')
 def uploaded_file(fn):
     path = os.path.join(app.config['UPLOAD_FOLDER'], fn)
-    if os.path.exists(path): return send_from_directory(app.config['UPLOAD_FOLDER'], fn)
+    if os.path.exists(path) and os.path.isfile(path):
+        return send_from_directory(app.config['UPLOAD_FOLDER'], fn)
     return send_from_directory('static', 'default.png')
 
 @app.errorhandler(404)
-def e404(e): return render_template('index.html', products=[]), 404
+def e404(e):
+    try:
+        products = Product.query.limit(8).all()
+    except:
+        products = []
+    return render_template('index.html', products=products), 404
 
 # --- Инициализация ---
-with app.app_context():
-    try: db.create_all()
-    except Exception as e: logger.error(f'DB init: {e}')
+def init_db():
+    """Инициализация базы данных с проверкой существования таблиц"""
+    with app.app_context():
+        try:
+            # Проверяем, существуют ли таблицы
+            db.create_all()
+            logger.info("Database initialized successfully")
+        except Exception as e:
+            logger.error(f"Database initialization error: {e}")
+
+init_db()
 
 application = app
-if __name__ == '__main__': app.run(debug=False)
+
+if __name__ == '__main__':
+    app.run(debug=False, host='0.0.0.0', port=5000)
