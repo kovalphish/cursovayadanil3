@@ -6,18 +6,34 @@ import os, uuid
 from functools import wraps
 from werkzeug.utils import secure_filename
 import logging
+import base64
+import requests
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev_key_2026')
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# БД
-db_url = os.environ.get('DATABASE_URL', 'sqlite:///shop.db')
+# Определяем окружение
+IS_VERCEL = os.environ.get('VERCEL', False)
+
+# БД - на Vercel используем PostgreSQL или SQLite в /tmp
+if IS_VERCEL:
+    # На Vercel используем PostgreSQL или SQLite в /tmp
+    db_url = os.environ.get('DATABASE_URL', 'sqlite:////tmp/shop.db')
+    if db_url.startswith('postgres://'):
+        db_url = db_url.replace('postgres://', 'postgresql://')
+    UPLOAD_FOLDER = '/tmp/uploads'
+else:
+    db_url = os.environ.get('DATABASE_URL', 'sqlite:///shop.db')
+    UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'uploads')
+
 app.config['SQLALCHEMY_DATABASE_URI'] = db_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'uploads')
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
+
+# Создаем папку для загрузок
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
 db = SQLAlchemy(app)
@@ -31,7 +47,7 @@ class Product(db.Model):
     price = db.Column(db.Float, nullable=False)
     stock = db.Column(db.Integer, default=0)
     description = db.Column(db.Text)
-    image = db.Column(db.String(200), default='default.png')
+    image = db.Column(db.String(500), default='default.png')  # Увеличил длину для URL
 
 class Order(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -68,27 +84,56 @@ def allowed_file(fn):
     return '.' in fn and fn.rsplit('.',1)[1].lower() in {'png','jpg','jpeg','gif','webp'}
 
 def save_image(img_file):
-    """Сохраняет изображение с уникальным именем"""
+    """Сохраняет изображение и возвращает путь"""
     if not img_file or not img_file.filename:
         return 'default.png'
     
-    fn = secure_filename(img_file.filename)
-    ext = fn.rsplit('.',1)[1].lower()
-    # Генерируем уникальное имя для каждого изображения
-    unique_name = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}.{ext}"
-    filepath = os.path.join(app.config['UPLOAD_FOLDER'], unique_name)
-    img_file.save(filepath)
-    
-    # Проверяем что файл сохранился
-    if os.path.exists(filepath) and os.path.getsize(filepath) > 0:
-        return unique_name
-    return 'default.png'
+    try:
+        fn = secure_filename(img_file.filename)
+        ext = fn.rsplit('.',1)[1].lower()
+        unique_name = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}.{ext}"
+        
+        # На Vercel сохраняем во временную папку /tmp
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], unique_name)
+        img_file.save(filepath)
+        
+        if os.path.exists(filepath) and os.path.getsize(filepath) > 0:
+            # Для Vercel возвращаем путь через специальный эндпоинт
+            if IS_VERCEL:
+                return unique_name
+            return unique_name
+        return 'default.png'
+    except Exception as e:
+        logger.error(f"Error saving image: {e}")
+        return 'default.png'
 
-# --- API: товары (для корзины на JS) ---
+def image_to_base64(img_path):
+    """Конвертирует изображение в base64 для отображения"""
+    try:
+        if img_path == 'default.png':
+            return None
+        
+        full_path = os.path.join(app.config['UPLOAD_FOLDER'], img_path)
+        if os.path.exists(full_path):
+            with open(full_path, 'rb') as f:
+                img_data = f.read()
+                return base64.b64encode(img_data).decode('utf-8')
+    except Exception as e:
+        logger.error(f"Error converting image: {e}")
+    return None
+
+# --- API: товары ---
 @app.route('/api/products')
 def api_products():
     products = Product.query.all()
-    return jsonify([{'id':p.id,'name':p.name,'price':p.price,'image':p.image,'stock':p.stock,'category':p.category or ''} for p in products])
+    return jsonify([{
+        'id':p.id,
+        'name':p.name,
+        'price':p.price,
+        'image':p.image,
+        'stock':p.stock,
+        'category':p.category or ''
+    } for p in products])
 
 # --- Страницы ---
 @app.route('/')
@@ -114,6 +159,18 @@ def products_page():
 def product_detail(id):
     p = Product.query.get_or_404(id)
     return render_template('product_detail.html', product=p)
+
+# --- Маршрут для отдачи изображений на Vercel ---
+@app.route('/image/<filename>')
+def get_image(filename):
+    """Отдает изображение из временной папки"""
+    if filename == 'default.png':
+        return send_from_directory('static', 'default.png')
+    
+    filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+    if os.path.exists(filepath):
+        return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
+    return send_from_directory('static', 'default.png')
 
 # --- Корзина ---
 @app.route('/cart')
@@ -207,24 +264,20 @@ def product_edit(id):
     p = Product.query.get_or_404(id)
     if request.method == 'POST':
         try:
-            # Сохраняем старое изображение для возможного удаления
             old_image = p.image
             
-            # Обновляем данные
             p.name = request.form['name']
             p.category = request.form.get('category','')
             p.price = float(request.form['price'])
             p.stock = int(request.form.get('stock',0) or 0)
             p.description = request.form.get('description','')
             
-            # Обрабатываем новое изображение
             f = request.files.get('image')
             if f and f.filename and allowed_file(f.filename):
-                # Сохраняем новое изображение
                 new_image = save_image(f)
                 if new_image and new_image != 'default.png':
                     p.image = new_image
-                    # Удаляем старое изображение, если оно не default
+                    # Удаляем старое изображение
                     if old_image and old_image != 'default.png':
                         old_path = os.path.join(app.config['UPLOAD_FOLDER'], old_image)
                         if os.path.exists(old_path):
@@ -243,7 +296,6 @@ def product_edit(id):
 def product_delete(id):
     try:
         p = Product.query.get_or_404(id)
-        # Удаляем изображение если оно не default
         if p.image and p.image != 'default.png':
             img_path = os.path.join(app.config['UPLOAD_FOLDER'], p.image)
             if os.path.exists(img_path):
@@ -285,16 +337,30 @@ def order_delete(id):
 # --- Статика ---
 @app.route('/static/uploads/<fn>')
 def uploaded_file(fn):
-    return send_from_directory(app.config['UPLOAD_FOLDER'], fn)
+    if fn == 'default.png':
+        return send_from_directory('static', 'default.png')
+    
+    # Сначала ищем в папке uploads
+    upload_path = os.path.join(app.config['UPLOAD_FOLDER'], fn)
+    if os.path.exists(upload_path):
+        return send_from_directory(app.config['UPLOAD_FOLDER'], fn)
+    
+    return send_from_directory('static', 'default.png')
 
 @app.errorhandler(404)
 def e404(e):
-    return render_template('index.html', products=[]), 404
+    products = Product.query.limit(8).all()
+    return render_template('index.html', products=products), 404
 
 # --- Инициализация ---
 with app.app_context():
-    db.create_all()
+    try:
+        db.create_all()
+        logger.info("Database initialized")
+    except Exception as e:
+        logger.error(f"DB init error: {e}")
 
+# Для Vercel
 application = app
 
 if __name__ == '__main__':
