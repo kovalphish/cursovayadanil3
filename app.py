@@ -13,18 +13,20 @@ app.secret_key = os.environ.get('SECRET_KEY', 'dev_key_2026')
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# БД (файл в каталоге instance — данные не теряются при очистке /tmp)
+# БД и файлы рядом с проектом — одна и та же папка на сервере для всех устройств.
+# С другого ПК/телефона заходите на URL ЭТОГО компьютера (http://192.168.x.x:5000), не на localhost.
+# На Vercel/serverless SQLite не подходит — задайте DATABASE_URL на PostgreSQL (Neon, Supabase и т.д.).
 _basedir = os.path.abspath(os.path.dirname(__file__))
 _instance = os.path.join(_basedir, 'instance')
 os.makedirs(_instance, exist_ok=True)
-# Имя файла как в проекте (instance/database.db), иначе Flask создаёт другой app.db — товары «исчезают»
 _default_sqlite = 'sqlite:///' + os.path.join(_instance, 'database.db').replace(os.sep, '/')
 db_url = os.environ.get('DATABASE_URL', _default_sqlite)
 if db_url.startswith('postgres://'):
     db_url = db_url.replace('postgres://', 'postgresql://')
 app.config['SQLALCHEMY_DATABASE_URI'] = db_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['UPLOAD_FOLDER'] = os.environ.get('UPLOAD_FOLDER', '/tmp/uploads')
+_default_uploads = os.path.join(_basedir, 'static', 'uploads')
+app.config['UPLOAD_FOLDER'] = os.environ.get('UPLOAD_FOLDER', _default_uploads)
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
@@ -260,5 +262,13 @@ with app.app_context():
     try: db.create_all()
     except Exception as e: logger.error(f'DB init: {e}')
 
+if db_url.startswith('sqlite'):
+    logger.info('База SQLite: %s', db_url.replace('sqlite:///', ''))
+else:
+    logger.info('База: PostgreSQL (DATABASE_URL)')
+
 application = app
-if __name__ == '__main__': app.run(debug=False)
+if __name__ == '__main__':
+    port = int(os.environ.get('PORT', '5000'))
+    # 0.0.0.0 — доступ с телефона/другого ПК по IP в локальной сети
+    app.run(host='0.0.0.0', port=port, debug=False)
