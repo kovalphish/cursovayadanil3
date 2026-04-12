@@ -1,40 +1,32 @@
 # ТехноМаркет — интернет-магазин бытовой техники
-from flask import Flask, render_template, request, redirect, url_for, flash, session, send_from_directory, jsonify
+from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
-import os, uuid
+import os
+import uuid
 from functools import wraps
-from werkzeug.utils import secure_filename
 import logging
 import base64
-import requests
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev_key_2026')
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Определяем окружение
-IS_VERCEL = os.environ.get('VERCEL', False)
+# Настройка БД для Vercel
+DATABASE_URL = os.environ.get('DATABASE_URL')
+if DATABASE_URL and DATABASE_URL.startswith('postgres://'):
+    DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://', 1)
 
-# БД - на Vercel используем PostgreSQL или SQLite в /tmp
-if IS_VERCEL:
-    # На Vercel используем PostgreSQL или SQLite в /tmp
-    db_url = os.environ.get('DATABASE_URL', 'sqlite:////tmp/shop.db')
-    if db_url.startswith('postgres://'):
-        db_url = db_url.replace('postgres://', 'postgresql://')
-    UPLOAD_FOLDER = '/tmp/uploads'
+if DATABASE_URL:
+    app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
 else:
-    db_url = os.environ.get('DATABASE_URL', 'sqlite:///shop.db')
-    UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'uploads')
+    # Fallback на SQLite в памяти (данные будут теряться при каждом запросе!)
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///:memory:'
+    logger.warning("Using in-memory SQLite - data will be lost!")
 
-app.config['SQLALCHEMY_DATABASE_URI'] = db_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
-
-# Создаем папку для загрузок
-os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
 db = SQLAlchemy(app)
 ADMIN_PASS = os.environ.get('ADMIN_PASSWORD', 'admin123')
@@ -47,7 +39,8 @@ class Product(db.Model):
     price = db.Column(db.Float, nullable=False)
     stock = db.Column(db.Integer, default=0)
     description = db.Column(db.Text)
-    image = db.Column(db.String(500), default='default.png')  # Увеличил длину для URL
+    image_data = db.Column(db.Text)  # Храним base64 изображения
+    image_type = db.Column(db.String(50), default='png')
 
 class Order(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -81,58 +74,30 @@ def login_required(f):
     return wrap
 
 def allowed_file(fn):
-    return '.' in fn and fn.rsplit('.',1)[1].lower() in {'png','jpg','jpeg','gif','webp'}
+    return '.' in fn and fn.rsplit('.', 1)[1].lower() in {'png', 'jpg', 'jpeg', 'gif', 'webp'}
 
-def save_image(img_file):
-    """Сохраняет изображение и возвращает путь"""
+def save_image_base64(img_file):
+    """Сохраняет изображение как base64 в БД"""
     if not img_file or not img_file.filename:
-        return 'default.png'
+        return None, None
     
-    try:
-        fn = secure_filename(img_file.filename)
-        ext = fn.rsplit('.',1)[1].lower()
-        unique_name = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}.{ext}"
-        
-        # На Vercel сохраняем во временную папку /tmp
-        filepath = os.path.join(app.config['UPLOAD_FOLDER'], unique_name)
-        img_file.save(filepath)
-        
-        if os.path.exists(filepath) and os.path.getsize(filepath) > 0:
-            # Для Vercel возвращаем путь через специальный эндпоинт
-            if IS_VERCEL:
-                return unique_name
-            return unique_name
-        return 'default.png'
-    except Exception as e:
-        logger.error(f"Error saving image: {e}")
-        return 'default.png'
+    data = img_file.read()
+    ext = img_file.filename.rsplit('.', 1)[1].lower()
+    
+    # Конвертируем в base64
+    b64_data = base64.b64encode(data).decode('utf-8')
+    return b64_data, ext
 
-def image_to_base64(img_path):
-    """Конвертирует изображение в base64 для отображения"""
-    try:
-        if img_path == 'default.png':
-            return None
-        
-        full_path = os.path.join(app.config['UPLOAD_FOLDER'], img_path)
-        if os.path.exists(full_path):
-            with open(full_path, 'rb') as f:
-                img_data = f.read()
-                return base64.b64encode(img_data).decode('utf-8')
-    except Exception as e:
-        logger.error(f"Error converting image: {e}")
-    return None
-
-# --- API: товары ---
+# --- API ---
 @app.route('/api/products')
 def api_products():
     products = Product.query.all()
     return jsonify([{
-        'id':p.id,
-        'name':p.name,
-        'price':p.price,
-        'image':p.image,
-        'stock':p.stock,
-        'category':p.category or ''
+        'id': p.id,
+        'name': p.name,
+        'price': p.price,
+        'stock': p.stock,
+        'category': p.category or ''
     } for p in products])
 
 # --- Страницы ---
@@ -143,9 +108,10 @@ def index():
 
 @app.route('/products')
 def products_page():
-    search = request.args.get('search','')
-    cat = request.args.get('category','')
+    search = request.args.get('search', '')
+    cat = request.args.get('category', '')
     q = Product.query
+    
     if search:
         q = q.filter(Product.name.ilike(f'%{search}%'))
     if cat:
@@ -153,24 +119,29 @@ def products_page():
     
     prods = q.all()
     categories = [c[0] for c in db.session.query(Product.category).distinct() if c[0]]
-    return render_template('products.html', products=prods, categories=categories, search=search, current_category=cat)
+    return render_template('products.html', products=prods, categories=categories, 
+                          search=search, current_category=cat)
 
 @app.route('/product/<int:id>')
 def product_detail(id):
     p = Product.query.get_or_404(id)
     return render_template('product_detail.html', product=p)
 
-# --- Маршрут для отдачи изображений на Vercel ---
-@app.route('/image/<filename>')
-def get_image(filename):
-    """Отдает изображение из временной папки"""
-    if filename == 'default.png':
-        return send_from_directory('static', 'default.png')
-    
-    filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-    if os.path.exists(filepath):
-        return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
-    return send_from_directory('static', 'default.png')
+@app.route('/image/<int:product_id>')
+def get_product_image(product_id):
+    """Возвращает изображение товара из БД"""
+    product = Product.query.get_or_404(product_id)
+    if product.image_data:
+        import base64
+        image_data = base64.b64decode(product.image_data)
+        from flask import Response
+        return Response(image_data, mimetype=f'image/{product.image_type}')
+    return send_default_image()
+
+def send_default_image():
+    """Отправляет изображение по умолчанию"""
+    from flask import send_file
+    return send_file('static/default.png', mimetype='image/png')
 
 # --- Корзина ---
 @app.route('/cart')
@@ -181,42 +152,45 @@ def cart_page():
 def checkout():
     data = request.get_json(force=True)
     if not data or not data.get('items'):
-        return jsonify({'error':'Корзина пуста'}), 400
+        return jsonify({'error': 'Корзина пуста'}), 400
     
-    name = data.get('name','').strip()
-    phone = data.get('phone','').strip()
-    address = data.get('address','').strip()
+    name = data.get('name', '').strip()
+    phone = data.get('phone', '').strip()
+    address = data.get('address', '').strip()
     
     if not all([name, phone, address]):
-        return jsonify({'error':'Заполните все поля'}), 400
+        return jsonify({'error': 'Заполните все поля'}), 400
     
     try:
-        total = sum(i['price']*i['qty'] for i in data['items'])
-        order = Order(customer_name=name, customer_phone=phone, customer_address=address, total=total)
+        total = sum(i['price'] * i['qty'] for i in data['items'])
+        order = Order(customer_name=name, customer_phone=phone, 
+                     customer_address=address, total=total)
         db.session.add(order)
         db.session.flush()
         
         for i in data['items']:
-            db.session.add(OrderItem(order_id=order.id, product_id=i['id'], product_name=i['name'], price=i['price'], quantity=i['qty']))
+            db.session.add(OrderItem(order_id=order.id, product_id=i['id'], 
+                                    product_name=i['name'], price=i['price'], 
+                                    quantity=i['qty']))
             p = Product.query.get(i['id'])
             if p:
                 p.stock = max(0, p.stock - i['qty'])
         
         db.session.commit()
-        return jsonify({'ok':True, 'order_id':order.id})
+        return jsonify({'ok': True, 'order_id': order.id})
     except Exception as e:
         db.session.rollback()
         logger.error(f'Checkout: {e}')
-        return jsonify({'error':'Ошибка оформления'}), 500
+        return jsonify({'error': 'Ошибка оформления'}), 500
 
 # --- Админка ---
-@app.route('/admin/login', methods=['GET','POST'])
+@app.route('/admin/login', methods=['GET', 'POST'])
 def admin_login():
     if request.method == 'POST':
         if request.form.get('password') == ADMIN_PASS:
             session['admin'] = True
             return redirect(url_for('admin'))
-        flash('Неверный пароль','error')
+        flash('Неверный пароль', 'error')
     return render_template('admin_login.html')
 
 @app.route('/admin/logout')
@@ -231,23 +205,26 @@ def admin():
     orders = Order.query.order_by(Order.date.desc()).all()
     return render_template('admin.html', products=prods, orders=orders)
 
-@app.route('/admin/product/add', methods=['GET','POST'])
+@app.route('/admin/product/add', methods=['GET', 'POST'])
 @login_required
 def product_add():
     if request.method == 'POST':
         try:
-            img_name = 'default.png'
+            image_b64 = None
+            image_type = 'png'
+            
             f = request.files.get('image')
             if f and f.filename and allowed_file(f.filename):
-                img_name = save_image(f)
+                image_b64, image_type = save_image_base64(f)
             
             p = Product(
                 name=request.form['name'],
-                category=request.form.get('category',''),
+                category=request.form.get('category', ''),
                 price=float(request.form['price']),
-                stock=int(request.form.get('stock',0) or 0),
-                description=request.form.get('description',''),
-                image=img_name
+                stock=int(request.form.get('stock', 0) or 0),
+                description=request.form.get('description', ''),
+                image_data=image_b64,
+                image_type=image_type
             )
             db.session.add(p)
             db.session.commit()
@@ -255,39 +232,34 @@ def product_add():
         except Exception as e:
             db.session.rollback()
             flash(f'Ошибка: {e}', 'error')
+            logger.error(f"Add product error: {e}")
         return redirect(url_for('admin'))
     return render_template('product_form.html', title='Добавить товар', product=None)
 
-@app.route('/admin/product/edit/<int:id>', methods=['GET','POST'])
+@app.route('/admin/product/edit/<int:id>', methods=['GET', 'POST'])
 @login_required
 def product_edit(id):
     p = Product.query.get_or_404(id)
     if request.method == 'POST':
         try:
-            old_image = p.image
-            
             p.name = request.form['name']
-            p.category = request.form.get('category','')
+            p.category = request.form.get('category', '')
             p.price = float(request.form['price'])
-            p.stock = int(request.form.get('stock',0) or 0)
-            p.description = request.form.get('description','')
+            p.stock = int(request.form.get('stock', 0) or 0)
+            p.description = request.form.get('description', '')
             
             f = request.files.get('image')
             if f and f.filename and allowed_file(f.filename):
-                new_image = save_image(f)
-                if new_image and new_image != 'default.png':
-                    p.image = new_image
-                    # Удаляем старое изображение
-                    if old_image and old_image != 'default.png':
-                        old_path = os.path.join(app.config['UPLOAD_FOLDER'], old_image)
-                        if os.path.exists(old_path):
-                            os.remove(old_path)
+                image_b64, image_type = save_image_base64(f)
+                p.image_data = image_b64
+                p.image_type = image_type
             
             db.session.commit()
             flash('Товар успешно обновлен', 'success')
         except Exception as e:
             db.session.rollback()
             flash(f'Ошибка: {e}', 'error')
+            logger.error(f"Edit product error: {e}")
         return redirect(url_for('admin'))
     return render_template('product_form.html', title='Редактировать товар', product=p)
 
@@ -296,11 +268,6 @@ def product_edit(id):
 def product_delete(id):
     try:
         p = Product.query.get_or_404(id)
-        if p.image and p.image != 'default.png':
-            img_path = os.path.join(app.config['UPLOAD_FOLDER'], p.image)
-            if os.path.exists(img_path):
-                os.remove(img_path)
-        
         db.session.delete(p)
         db.session.commit()
         flash('Товар удален', 'success')
@@ -314,7 +281,7 @@ def product_delete(id):
 def order_status(id):
     try:
         o = Order.query.get_or_404(id)
-        o.status = request.form.get('status','new')
+        o.status = request.form.get('status', 'new')
         db.session.commit()
         flash('Статус обновлен', 'success')
     except Exception as e:
@@ -334,31 +301,39 @@ def order_delete(id):
         flash(f'Ошибка: {e}', 'error')
     return redirect(url_for('admin'))
 
-# --- Статика ---
-@app.route('/static/uploads/<fn>')
-def uploaded_file(fn):
-    if fn == 'default.png':
-        return send_from_directory('static', 'default.png')
-    
-    # Сначала ищем в папке uploads
-    upload_path = os.path.join(app.config['UPLOAD_FOLDER'], fn)
-    if os.path.exists(upload_path):
-        return send_from_directory(app.config['UPLOAD_FOLDER'], fn)
-    
-    return send_from_directory('static', 'default.png')
-
 @app.errorhandler(404)
 def e404(e):
     products = Product.query.limit(8).all()
     return render_template('index.html', products=products), 404
 
-# --- Инициализация ---
-with app.app_context():
-    try:
-        db.create_all()
-        logger.info("Database initialized")
-    except Exception as e:
-        logger.error(f"DB init error: {e}")
+@app.errorhandler(500)
+def e500(e):
+    logger.error(f"500 error: {e}")
+    return render_template('index.html', products=[]), 500
+
+# --- Инициализация БД ---
+def init_db():
+    with app.app_context():
+        try:
+            db.create_all()
+            logger.info("Database initialized")
+            
+            # Добавляем тестовые товары если БД пуста
+            if Product.query.count() == 0:
+                test_products = [
+                    Product(name="Холодильник Samsung", category="Холодильники", price=45000, stock=10),
+                    Product(name="Стиральная машина LG", category="Стиральные машины", price=35000, stock=15),
+                    Product(name="Микроволновка Panasonic", category="Микроволновые печи", price=12000, stock=20),
+                    Product(name="Пылесос Philips", category="Пылесосы", price=18000, stock=8),
+                ]
+                for p in test_products:
+                    db.session.add(p)
+                db.session.commit()
+                logger.info("Test products added")
+        except Exception as e:
+            logger.error(f"DB init error: {e}")
+
+init_db()
 
 # Для Vercel
 application = app
