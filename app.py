@@ -1,7 +1,6 @@
 # ТехноМаркет — интернет-магазин бытовой техники
 from flask import Flask, render_template, request, redirect, url_for, flash, session, send_from_directory, jsonify
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import select
 from datetime import datetime
 import os, uuid
 from functools import wraps
@@ -13,20 +12,13 @@ app.secret_key = os.environ.get('SECRET_KEY', 'dev_key_2026')
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# БД и файлы рядом с проектом — одна и та же папка на сервере для всех устройств.
-# С другого ПК/телефона заходите на URL ЭТОГО компьютера (http://192.168.x.x:5000), не на localhost.
-# На Vercel/serverless SQLite не подходит — задайте DATABASE_URL на PostgreSQL (Neon, Supabase и т.д.).
-_basedir = os.path.abspath(os.path.dirname(__file__))
-_instance = os.path.join(_basedir, 'instance')
-os.makedirs(_instance, exist_ok=True)
-_default_sqlite = 'sqlite:///' + os.path.join(_instance, 'database.db').replace(os.sep, '/')
-db_url = os.environ.get('DATABASE_URL', _default_sqlite)
+# БД
+db_url = os.environ.get('DATABASE_URL', 'sqlite:////tmp/app.db')
 if db_url.startswith('postgres://'):
     db_url = db_url.replace('postgres://', 'postgresql://')
 app.config['SQLALCHEMY_DATABASE_URI'] = db_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-_default_uploads = os.path.join(_basedir, 'static', 'uploads')
-app.config['UPLOAD_FOLDER'] = os.environ.get('UPLOAD_FOLDER', _default_uploads)
+app.config['UPLOAD_FOLDER'] = os.environ.get('UPLOAD_FOLDER', '/tmp/uploads')
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
@@ -108,15 +100,9 @@ def products_page():
     if cat: q = q.filter_by(category=cat)
     try:
         prods = q.all()
-    except Exception as e:
-        logger.exception('products_page: load products failed: %s', e)
-        prods = []
-    categories = []
-    try:
-        rows = db.session.execute(select(Product.category).distinct()).all()
-        categories = sorted({r[0] for r in rows if r[0]})
-    except Exception as e:
-        logger.exception('products_page: load categories failed: %s', e)
+        categories = [c[0] for c in db.session.query(Product.category).distinct() if c[0]]
+    except:
+        prods, categories = [], []
     return render_template('products.html', products=prods, categories=categories, search=search, current_category=cat)
 
 @app.route('/product/<int:id>')
@@ -175,14 +161,9 @@ def admin_logout():
 def admin():
     try:
         prods = Product.query.all()
-    except Exception as e:
-        logger.exception('admin: load products failed: %s', e)
-        prods = []
-    try:
         orders = Order.query.order_by(Order.date.desc()).all()
-    except Exception as e:
-        logger.exception('admin: load orders failed: %s', e)
-        orders = []
+    except:
+        prods, orders = [], []
     return render_template('admin.html', products=prods, orders=orders)
 
 @app.route('/admin/product/add', methods=['GET','POST'])
@@ -262,13 +243,5 @@ with app.app_context():
     try: db.create_all()
     except Exception as e: logger.error(f'DB init: {e}')
 
-if db_url.startswith('sqlite'):
-    logger.info('База SQLite: %s', db_url.replace('sqlite:///', ''))
-else:
-    logger.info('База: PostgreSQL (DATABASE_URL)')
-
 application = app
-if __name__ == '__main__':
-    port = int(os.environ.get('PORT', '5000'))
-    # 0.0.0.0 — доступ с телефона/другого ПК по IP в локальной сети
-    app.run(host='0.0.0.0', port=port, debug=False)
+if __name__ == '__main__': app.run(debug=False)
