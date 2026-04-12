@@ -2,25 +2,28 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, session, send_from_directory, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
-import os, uuid
+import os, uuid, tempfile
 from functools import wraps
 from werkzeug.utils import secure_filename
 import logging
+import base64
+from io import BytesIO
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev_key_2026')
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# БД
-db_url = os.environ.get('DATABASE_URL', 'sqlite:///shop.db')  # Изменено на локальный файл
+# БД - используем SQLite в временной директории
+db_path = os.path.join(tempfile.gettempdir(), 'shop.db')
+db_url = os.environ.get('DATABASE_URL', f'sqlite:///{db_path}')
 if db_url.startswith('postgres://'):
     db_url = db_url.replace('postgres://', 'postgresql://')
 app.config['SQLALCHEMY_DATABASE_URI'] = db_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# Создаем папки для загрузок
-UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'uploads')
+# Используем временную директорию для загрузок
+UPLOAD_FOLDER = os.path.join(tempfile.gettempdir(), 'uploads')
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
@@ -37,6 +40,7 @@ class Product(db.Model):
     stock = db.Column(db.Integer, default=0)
     description = db.Column(db.Text)
     image = db.Column(db.String(200), default='default.png')
+    image_data = db.Column(db.Text, nullable=True)  # Для хранения base64 изображений
 
 class Order(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -73,19 +77,35 @@ def allowed_file(fn):
     return '.' in fn and fn.rsplit('.',1)[1].lower() in {'png','jpg','jpeg','gif','webp'}
 
 def save_image(img_file):
-    fn = secure_filename(img_file.filename)
-    ext = fn.rsplit('.',1)[1].lower()
-    name = f"{uuid.uuid4().hex}.{ext}"
-    filepath = os.path.join(app.config['UPLOAD_FOLDER'], name)
-    img_file.save(filepath)
-    logger.info(f"Изображение сохранено: {filepath}")
-    return name
+    """Сохраняет изображение и возвращает имя файла"""
+    try:
+        fn = secure_filename(img_file.filename)
+        ext = fn.rsplit('.',1)[1].lower()
+        name = f"{uuid.uuid4().hex}.{ext}"
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], name)
+        img_file.save(filepath)
+        logger.info(f"Изображение сохранено: {filepath}")
+        return name
+    except Exception as e:
+        logger.error(f"Ошибка сохранения изображения: {e}")
+        return 'default.png'
+
+def get_image_url(image_name):
+    """Возвращает URL для изображения"""
+    return url_for('uploaded_file', filename=image_name)
 
 # --- API: товары (для корзины на JS) ---
 @app.route('/api/products')
 def api_products():
     products = Product.query.all()
-    return jsonify([{'id':p.id,'name':p.name,'price':p.price,'image':p.image,'stock':p.stock,'category':p.category or ''} for p in products])
+    return jsonify([{
+        'id':p.id,
+        'name':p.name,
+        'price':p.price,
+        'image':p.image,
+        'stock':p.stock,
+        'category':p.category or ''
+    } for p in products])
 
 # --- Страницы ---
 @app.route('/')
@@ -262,32 +282,41 @@ def order_delete(id):
 def uploaded_file(filename):
     """Отдача загруженных изображений"""
     try:
+        # Пытаемся отдать из папки загрузок
         return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
     except Exception as e:
         logger.error(f"File not found: {filename}, error: {e}")
+        # Если файла нет, отдаем заглушку через data:image
         return send_from_directory('static', 'default.png')
 
-# --- Инициализация и добавление тестовых данных ---
+# Создаем заглушку для default.png если её нет
+@app.route('/static/default.png')
+def default_image():
+    return send_from_directory('static', 'default.png')
+
+# --- Инициализация ---
 with app.app_context():
     try:
-        # Создаем таблицы
         db.create_all()
         
-        # Копируем default.png в папку uploads если её нет
-        default_img_path = os.path.join(app.config['UPLOAD_FOLDER'], 'default.png')
-        if not os.path.exists(default_img_path):
-            # Создаем простой default.png если его нет
-            from PIL import Image, ImageDraw
-            try:
-                img = Image.new('RGB', (200, 200), color='#0066ff')
-                draw = ImageDraw.Draw(img)
-                draw.text((70, 90), "Нет фото", fill='white')
-                img.save(default_img_path)
-                logger.info("Создан default.png")
-            except:
-                logger.warning("Не удалось создать default.png")
+        # Создаем заглушку для default.png в папке static если её нет
+        static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static')
+        os.makedirs(static_dir, exist_ok=True)
+        default_img_path = os.path.join(static_dir, 'default.png')
         
-        # Добавляем тестовые товары, если база пуста
+        if not os.path.exists(default_img_path):
+            # Создаем простой SVG как PNG заглушку
+            svg_content = '''<svg width="200" height="200" xmlns="http://www.w3.org/2000/svg">
+                <rect width="200" height="200" fill="#0066ff"/>
+                <text x="100" y="110" font-size="16" fill="white" text-anchor="middle">Нет фото</text>
+            </svg>'''
+            
+            # Конвертируем SVG в PNG через base64 (просто сохраняем как SVG с расширением .png для простоты)
+            with open(default_img_path, 'w') as f:
+                f.write(svg_content)
+            logger.info("Создан default.png (как SVG)")
+        
+        # Добавляем тестовые товары
         if Product.query.count() == 0:
             test_products = [
                 Product(name="Холодильник Samsung RB-30J3000WW", category="Холодильники", price=49990, stock=10, 
@@ -300,6 +329,8 @@ with app.app_context():
                        description="Микроволновая печь с грилем", image="default.png"),
                 Product(name="Пылесос Dyson V8 Absolute", category="Пылесосы", price=32990, stock=7,
                        description="Беспроводной пылесос высокой мощности", image="default.png"),
+                Product(name="Электрочайник Bosch TWK3A011", category="Мелкая техника", price=2490, stock=20,
+                       description="Электрический чайник из нержавеющей стали", image="default.png"),
             ]
             for product in test_products:
                 db.session.add(product)
