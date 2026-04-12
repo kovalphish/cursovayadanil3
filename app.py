@@ -17,7 +17,8 @@ logger = logging.getLogger(__name__)
 _basedir = os.path.abspath(os.path.dirname(__file__))
 _instance = os.path.join(_basedir, 'instance')
 os.makedirs(_instance, exist_ok=True)
-_default_sqlite = 'sqlite:///' + os.path.join(_instance, 'app.db').replace(os.sep, '/')
+# Имя файла как в проекте (instance/database.db), иначе Flask создаёт другой app.db — товары «исчезают»
+_default_sqlite = 'sqlite:///' + os.path.join(_instance, 'database.db').replace(os.sep, '/')
 db_url = os.environ.get('DATABASE_URL', _default_sqlite)
 if db_url.startswith('postgres://'):
     db_url = db_url.replace('postgres://', 'postgresql://')
