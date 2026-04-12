@@ -1,6 +1,7 @@
 # ТехноМаркет — интернет-магазин бытовой техники
 from flask import Flask, render_template, request, redirect, url_for, flash, session, send_from_directory, jsonify
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import select
 from datetime import datetime
 import os, uuid
 from functools import wraps
@@ -12,8 +13,12 @@ app.secret_key = os.environ.get('SECRET_KEY', 'dev_key_2026')
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# БД
-db_url = os.environ.get('DATABASE_URL', 'sqlite:////tmp/app.db')
+# БД (файл в каталоге instance — данные не теряются при очистке /tmp)
+_basedir = os.path.abspath(os.path.dirname(__file__))
+_instance = os.path.join(_basedir, 'instance')
+os.makedirs(_instance, exist_ok=True)
+_default_sqlite = 'sqlite:///' + os.path.join(_instance, 'app.db').replace(os.sep, '/')
+db_url = os.environ.get('DATABASE_URL', _default_sqlite)
 if db_url.startswith('postgres://'):
     db_url = db_url.replace('postgres://', 'postgresql://')
 app.config['SQLALCHEMY_DATABASE_URI'] = db_url
@@ -100,9 +105,15 @@ def products_page():
     if cat: q = q.filter_by(category=cat)
     try:
         prods = q.all()
-        categories = [c[0] for c in db.session.query(Product.category).distinct() if c[0]]
-    except:
-        prods, categories = [], []
+    except Exception as e:
+        logger.exception('products_page: load products failed: %s', e)
+        prods = []
+    categories = []
+    try:
+        rows = db.session.execute(select(Product.category).distinct()).all()
+        categories = sorted({r[0] for r in rows if r[0]})
+    except Exception as e:
+        logger.exception('products_page: load categories failed: %s', e)
     return render_template('products.html', products=prods, categories=categories, search=search, current_category=cat)
 
 @app.route('/product/<int:id>')
@@ -161,9 +172,14 @@ def admin_logout():
 def admin():
     try:
         prods = Product.query.all()
+    except Exception as e:
+        logger.exception('admin: load products failed: %s', e)
+        prods = []
+    try:
         orders = Order.query.order_by(Order.date.desc()).all()
-    except:
-        prods, orders = [], []
+    except Exception as e:
+        logger.exception('admin: load orders failed: %s', e)
+        orders = []
     return render_template('admin.html', products=prods, orders=orders)
 
 @app.route('/admin/product/add', methods=['GET','POST'])
